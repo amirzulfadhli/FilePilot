@@ -5,6 +5,7 @@ namespace FilePilot.Core.Documents;
 public sealed class DocxPdfConverter(IDocumentPdfEngine engine, DocumentConversionLimits? limits = null) : IDocumentConverter
 {
     private readonly DocumentConversionLimits limits = limits ?? new();
+    internal string? WorkingDirectoryRoot { get; init; }
     public Task<DocumentConversionResult> ConvertAsync(DocumentConversionRequest request, CancellationToken cancellationToken = default) =>
         Task.Run(() => ConvertCoreAsync(request, cancellationToken), cancellationToken);
 
@@ -19,7 +20,13 @@ public sealed class DocxPdfConverter(IDocumentPdfEngine engine, DocumentConversi
         await using var source = new FileStream(file.FullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.Asynchronous);
         await DocxPreflight.ValidateAsync(source, limits, token);
         token.ThrowIfCancellationRequested();
-        var job = Path.Combine(folder, ".filepilot-doc-" + Guid.NewGuid().ToString("N"));
+        // LibreOffice's native profile/extension files can exceed MAX_PATH when nested
+        // under a long destination. Keep engine work short; AtomicOutput still finalizes
+        // through a temporary file on the destination volume.
+        var workRoot = LocalPathPolicy.Validate(WorkingDirectoryRoot ?? Path.GetTempPath());
+        if (!Directory.Exists(workRoot)) throw new DocumentConversionException("The local temporary folder is unavailable.");
+        if (workRoot.Length > 120) throw new DocumentConversionException("The temporary folder path is too long for the document engine. Configure a shorter local TEMP folder and restart FilePilot.");
+        var job = Path.Combine(workRoot, ".filepilot-doc-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(job);
         var keepJob = false;
         try
@@ -28,6 +35,7 @@ public sealed class DocxPdfConverter(IDocumentPdfEngine engine, DocumentConversi
             source.Position = 0;
             await using (var copy = new FileStream(input, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, FileOptions.Asynchronous))
                 await source.CopyToAsync(copy, token);
+            DocxMetadata.RemoveFromCopy(input, token);
             var output = Directory.CreateDirectory(Path.Combine(job, "output")).FullName;
             var profile = Directory.CreateDirectory(Path.Combine(job, "profile")).FullName;
             await engine.ExportAsync(input, output, profile, token);

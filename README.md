@@ -56,11 +56,11 @@ pwsh -NoProfile -File scripts/Measure-FilePilot.ps1 -ExecutablePath artifacts/pa
 ```
 
 Close other FilePilot instances for an uncontested diagnostic shortcut. Synthetic reports/fixtures stay under `artifacts/`; no existing reports are overwritten. Final measured medians were about 1,223 ms / 67.0 MiB hidden private memory for the popup and 895 ms / 70.4 MiB for the hidden widget on this Windows 11 x64 host. These are observed baselines with runtime/OS caching, not guaranteed cold-start times or hard memory caps. Working-set figures and repeat-run maximums are documented separately. The final Phase 4 build passed all 125 application tests, 22 packaging/script checks and six extracted-package diagnostic sessions.
-## DOCX → PDF (Phase 5 in progress)
+## DOCX → PDF (Phase 5)
 
 The first document-conversion slice is implemented on `feature/phase-5-documents`. It uses an optional local LibreOffice installation selected in Settings (`program/soffice.com`), keeping the engine outside FilePilot's lightweight package. Single DOCX files expose an Export PDF panel with destination, cancellation, collision protection and Open folder. Without a configured engine, existing file/image actions work and PDF export explains the setup requirement.
 
-See [Phase 5 setup, safety boundaries and validation](docs/phase-5-documents.md) before using it. The initial policy refuses external links, active/embedded content and unsupported media. Real LibreOffice rendering has **not** been verified here; the machine has no discovered engine. Adapter/process tests use an isolated test-only executable, not a document renderer. PDF layout/font fidelity and document metadata scrubbing remain unverified. This phase is still in progress.
+See [Phase 5 setup, safety boundaries and validation](docs/phase-5-documents.md) before using it. The initial policy refuses external links, active/embedded content and unsupported media. Real LibreOffice 26.8.1.1 conversion passed Windows 11 acceptance: two-page styled text/table/image/Unicode rendering, source preservation, no-overwrite collisions, native cancellation/exit, cleanup, timeout and malformed input. All 161 tests passed with the real engine enabled, and the rendered pages were visually inspected. Source document properties are removed from an owned copy; PDF producer and export time remain. Other fonts/layouts, engine versions and Windows 10 need separate acceptance. Three real-engine tests are explicitly skipped when FILEPILOT_LIBREOFFICE is not configured.
 
 Ctrl+O opens the file picker. Escape closes an open format/favorite dropdown before dismissing the widget; single-file views hide empty batch details.
 
@@ -187,7 +187,7 @@ There is no MVVM framework or DI container. The converter is constructor-injecta
 
 The sole new direct runtime package is **SkiaSharp 4.153.1**, a maintained MIT-licensed .NET wrapper for native Skia. Its NuGet dependencies supply native assets; publishing with `-r win-x64` selects the Windows architecture. No WPF-specific Skia view package is needed. SkiaSharp was chosen because currently maintained ImageSharp packages require build-time license setup; no older unpatched package or license-enforcement bypass is used. Keep native codecs updated. NuGet restore needs network access unless packages are cached; normal application use is offline.
 
-Document conversion now has a separate `IDocumentConverter` / `IDocumentPdfEngine` contract, bounded DOCX preflight and optional LibreOffice adapter; the image format selector stays image-specific. See the Phase 5 document for the initial engine/deployment/cancellation policy and unverified real-engine behavior.
+Document conversion now has a separate `IDocumentConverter` / `IDocumentPdfEngine` contract, bounded DOCX preflight and optional LibreOffice adapter; the image format selector stays image-specific. See the Phase 5 document for the engine/deployment/cancellation policy and real LibreOffice acceptance results.
 
 ## Verification and limitations
 
@@ -211,7 +211,8 @@ Unverified Phase 3 desktop flows: full favorite-folder picker/add/remove/move in
 2. Phase 2 — Explorer registration and safe image conversion (completed).
 3. Phase 3 — floating widget, shortcut, batch conversion, rename, and favorite folders (implemented).
 4. Phase 4 — portable packaging, startup/memory tooling, extracted-package runtime checks and resident lifecycle fix completed for the available Windows 11 host; Windows 10 is explicitly unverified.
-5. Phase 5 (in progress) — first optional DOCX → PDF adapter/UI and widget usability slice implemented; real-engine rendering/metadata acceptance remains. Installer/signing and optional Windows 11 primary-menu integration remain later work.
+5. Phase 5 — optional single-DOCX → PDF conversion verified with real LibreOffice 26.8.1.1 on Windows 11, source-property minimization, short local engine workspaces, cancellation/timeout/error handling and initial widget usability checks. See docs/phase-5-documents.md for evidence and limits.
+6. Phase 6 — widget UI/UX improvements, measured performance, per-user Windows installation and stability. Installer signing and optional Windows 11 primary-menu integration remain later work.
 
 Windows 10 and broad hardware/accessibility acceptance remain unverified release limitations, not inferred from Windows 11 test results.
 

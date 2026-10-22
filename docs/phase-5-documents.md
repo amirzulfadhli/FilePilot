@@ -1,6 +1,6 @@
 # Phase 5 — first document conversion slice
 
-Status: implemented on `feature/phase-5-documents`, with adapter/file-safety tests. **Actual LibreOffice rendering has not run on this machine** because no LibreOffice installation was found in the standard locations or PATH. The process fixture used in tests is synthetic, is never shipped, and does not render documents. This is not a completed document-rendering acceptance claim.
+Status: Phase 5 acceptance completed on the available Windows 11 host using real LibreOffice 26.8.1.1. Windows 10 remains explicitly unverified. This covers the conservative, single-DOCX feature boundary below, not arbitrary Word documents or pixel-identical Microsoft Word layout.
 
 ## Engine choice and setup
 
@@ -20,11 +20,11 @@ LibreOffice documents [headless Windows CLI use through soffice.com](https://hel
 
 Default limits: 32 MiB compressed source, 128 MiB actual expanded bytes, 2,048 entries, 8 MiB per XML part, 16 million pixels per embedded PNG/JPEG (64 million across the package, 16,384 pixels per edge, animations refused), 64 MiB completed PDF, and a 90-second engine deadline. These are guardrails, not hard native process memory/disk quotas. Keep the native engine patched and use trusted documents/engines. FilePilot makes no document-network requests and refuses explicit external content, but it does not impose an OS network sandbox on a separately installed engine.
 
-Each job has a random, owned `.filepilot-doc-<id>` directory inside the chosen destination. Its source copy, output, and LibreOffice user profile are isolated from the original and the user's normal office profile. The generated profile requests disabled macro execution, active content and OLE automation. Enforcement/fidelity still needs real-engine acceptance testing; inspect the [engine configuration definitions](https://github.com/LibreOffice/core/blob/master/officecfg/registry/schema/org/openoffice/Office/Common.xcs) when upgrading LibreOffice.
+Each job has a random, owned `.filepilot-doc-<id>` directory in the validated local TEMP folder. Native LibreOffice profile files failed under deeply nested destinations during real testing; the short engine workspace fixes this while destination-side AtomicOutput still provides safe finalization. TEMP roots longer than 120 characters are refused with guidance. Its source copy, output, and LibreOffice user profile are isolated from the original and the user's normal office profile. The generated profile requests disabled macro execution, active content and OLE automation. The settings are now written to the actual `profile/user/registrymodifications.xcu` location and survived a real export. This does not certify resistance to all active-content exploits; preflight still refuses such documents. Inspect the [engine configuration definitions](https://github.com/LibreOffice/core/blob/master/officecfg/registry/schema/org/openoffice/Office/Common.xcs) when upgrading LibreOffice.
 
 The adapter uses `ProcessStartInfo.ArgumentList` without a shell, handles Unicode/spaces, drains both output streams with only bounded diagnostic text retained, and kills its owned process tree on cancellation/timeout. If the process cannot be confirmed stopped, its work directory is retained and reported instead of racing deletion. Otherwise owned job work is cleaned. Cleanup failures identify the retained location; if finalization already succeeded, check the output folder before retrying.
 
-A successful engine result must contain a bounded PDF with `%PDF-` and `%%EOF` markers. These checks detect obvious empty/wrong/incomplete output; they do not validate PDF semantics or rendering fidelity. The completed bytes reuse `AtomicOutput` for flush and same-directory no-overwrite finalization. Nothing replaces the source or an existing output. Metadata scrubbing for document PDFs is not implemented/verified; the image converter's metadata policy does not imply a document policy. Review document/PDF metadata before sharing.
+A successful engine result must contain a bounded PDF with `%PDF-` and `%%EOF` markers. These checks detect obvious empty/wrong/incomplete output; they do not validate PDF semantics or rendering fidelity. The completed bytes reuse `AtomicOutput` for flush and same-directory no-overwrite finalization. Nothing replaces the source or an existing output. Before export, FilePilot removes docProps parts (core, extended, custom properties and thumbnails) and their package references from its owned DOCX copy. The isolated profile requests removal of personal user, note, revision and printer information. Real PDF inspection confirmed no source author, title, subject, keywords or custom-property sentinels. PDF Creator/Producer and a new export CreationDate remain. This is property minimization, not anonymization: visible text, images, comments/revisions and embedded image data may identify people. Inspect sensitive outputs before sharing.
 
 ## Widget usability changes
 
@@ -33,8 +33,33 @@ A successful engine result must contain a bounded PDF with `%PDF-` and `%%EOF` m
 - Empty single-file batch details are hidden.
 - Missing/removed document engines disable PDF export and explain the setup requirement; saved theme/shortcut/favorites still load.
 
-## Validation and remaining work
+## Validation on 23 October 2026
 
-Release build: zero warnings/errors. All **156 application tests** passed without skips (including the original file/image suite). New checks cover DOCX limits/content refusal, source content/timestamp preservation, early/late file and folder collisions, output markers/size, locks, cancellation and work cleanup, safe engine arguments, and UI/settings busy-state recovery. An isolated test-only executable exercises real process launch, noisy stdout/stderr, exit failure, timeout and cancellation. WPF tests load the document panel and settings and verify the Open command binding. No real LibreOffice rendering is implied by these tests. All 22 packaging/script checks passed; the Phase 5 ZIP validated with 12 payload files (including both offline setup/validation documents) plus its manifest and no test executable/office engine bundled. Two extracted-package startup/memory/image-codec smoke sessions (one per mode) stayed within the existing budgets.
+Release build: zero warnings/errors. **161 tests passed, zero skipped**, with FILEPILOT_LIBREOFFICE configured. This includes 158 regular tests and three opt-in real-renderer tests, plus all earlier file/image/widget regressions. All 22 packaging/script checks passed. NuGet reported no known vulnerable direct/transitive packages from its current feed.
 
-Remaining: real LibreOffice conversion and visual PDF checks with representative text/tables/images/fonts, real profile/active-content settings validation, engine/version/OS acceptance (including Windows 10), manual native-picker/keyboard checks, PDF metadata policy, and broader format/media support. Desktop automation did not expose a targetable app window during this slice, so new interactive UI behavior has not been manually certified. Phase 5 remains in progress.
+Real engine: LibreOffice 26.8.1.1 (bf6ef2662401c7d6dce671ab4deb26ee0af3a7c1), Windows x64, Windows 11 build 26200. The official MSI's SHA-256 was C6298B10CFA1748BCBEDAD94C62CE771E240E5021BFD6D7A967CD571B04B5312, matching its official mirror listing, with a valid The Document Foundation signature. It was administratively extracted under ignored artifacts, not installed system-wide or bundled with FilePilot. Its missing C++ runtime was supplied app-locally from Microsoft's signed v14.51.36247 x64 redistributable. This verifies that test setup; users should install/repair LibreOffice and its supported prerequisites normally. No system runtime DLLs were replaced.
+
+The synthetic, generated DOCX contains styled Latin text, a bordered table, a PNG, Chinese text, A4 margins and an explicit page break. The final PDF was parsed with pypdf and rendered with PDFium; both pages were visually inspected. Two A4 pages, text, Unicode, image and source-property removal checks passed. Fonts/layout looked intact for this fixture; no comparison with Microsoft Word was available, and this is not broad Word-fidelity certification. Creator=Writer, Producer=LibreOffice 26.8.1.1 and a new CreationDate remain.
+
+Real tests exercised source SHA-256/timestamp preservation, repeated-output collision refusal, cancellation after soffice.bin appeared, confirmed native renderer exit, owned-work cleanup, a 1 ms deadline, and LibreOffice's response to malformed input. The regular suite covers preflight corruption/active content, limits, permissions/locks, invalid/missing/oversized output, late collisions, diagnostic bounds, initialization failure, and inability to stop an engine. Failed exploratory runs exposed the profile-location, native-runtime diagnostics and long-profile-path issues fixed in this change; only the final passing run counts as acceptance.
+
+To reproduce (Windows, trusted LibreOffice already available):
+
+```powershell
+$env:FILEPILOT_LIBREOFFICE = 'C:\Program Files\LibreOffice\program\soffice.com'
+$env:FILEPILOT_DOCUMENT_TEST_OUTPUT = Join-Path $PWD 'artifacts/document-acceptance/my-run'
+New-Item -ItemType Directory $env:FILEPILOT_DOCUMENT_TEST_OUTPUT
+# Use a new output directory for each acceptance run.
+dotnet build FilePilot.slnx -c Release
+dotnet test FilePilot.slnx -c Release --no-build --no-restore
+# Development-only Python packages: pypdf, pypdfium2, Pillow (not app dependencies).
+python scripts/Inspect-DocumentPdf.py $env:FILEPILOT_DOCUMENT_TEST_OUTPUT
+if ($LASTEXITCODE -ne 0) { throw 'PDF inspection failed' }
+```
+
+Without FILEPILOT_LIBREOFFICE the three real-engine tests are explicitly skipped; synthetic process tests cannot replace them. Generated DOCX/PDF/page PNG/profile reports are acceptance artifacts, never shipped. Inspect the rendered PNGs after the assertions.
+
+Remaining release limits: Windows 10 (explicitly unverified by user agreement), other engine versions/architectures, arbitrary fonts/complex Word layouts, full accessibility/high contrast and multi-monitor/DPI acceptance, hostile native-engine security, native process memory/disk quotas, DOCX batches and broader media/formats. Keep the separately installed engine patched. Phase 6 follows with settings/widget usability, performance and per-user Windows deployment work.
+
+Interactive Windows 11 checks also ran: real widget DOCX export, visible busy indicator and disabled conflicting actions, success feedback with original still selected, missing-engine export disabled, Ctrl+O/native-picker cancellation, light/dark theme rendering and Settings keyboard submission. The temporary engine preference used for UI testing was restored afterward. Settings Save required scrolling and Escape did not dismiss Settings; these usability findings are queued for Phase 6. Open-folder invocation was exercised; Explorer's resulting path is recorded only if observed below.
+Explorer exposed the document-ui output folder after Open PDF folder; the launch was observed successfully.

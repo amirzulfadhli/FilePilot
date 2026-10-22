@@ -6,8 +6,9 @@ File.WriteAllText(Path.Combine(root, "started.txt"), Environment.ProcessId.ToStr
 File.WriteAllText(Path.Combine(root, "arguments.json"), JsonSerializer.Serialize(args));
 var profileArgument = args.FirstOrDefault(value => value.StartsWith("-env:UserInstallation=", StringComparison.Ordinal));
 if (profileArgument is not null)
-    File.Copy(Path.Combine(new Uri(profileArgument["-env:UserInstallation=".Length..]).LocalPath, "registrymodifications.xcu"), Path.Combine(root, "requested-profile.xcu"), overwrite: true);
+    File.Copy(Path.Combine(new Uri(profileArgument["-env:UserInstallation=".Length..]).LocalPath, "user", "registrymodifications.xcu"), Path.Combine(root, "requested-profile.xcu"), overwrite: true);
 var mode = File.ReadAllText(Path.Combine(root, "mode.txt")).Trim();
+if (mode == "missing-runtime") { Environment.ExitCode = unchecked((int)0xC0000135); return; }
 if (mode == "hang") { await Task.Delay(TimeSpan.FromMinutes(10)); return; }
 if (mode is "fail" or "noisy")
 {

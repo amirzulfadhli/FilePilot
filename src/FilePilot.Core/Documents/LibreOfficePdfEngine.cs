@@ -34,7 +34,8 @@ public sealed class LibreOfficePdfEngine(string executablePath, TimeSpan? timeou
         cancellationToken.ThrowIfCancellationRequested();
         var start = BuildStartInfo(executablePath, inputPath, outputFolder, profileFolder);
         // Fresh, per-job preferences. Do not read or modify the user's LibreOffice profile.
-        File.WriteAllText(Path.Combine(profileFolder, "registrymodifications.xcu"), """
+        var userProfile = Directory.CreateDirectory(Path.Combine(profileFolder, "user")).FullName;
+        File.WriteAllText(Path.Combine(userProfile, "registrymodifications.xcu"), """
             <?xml version="1.0" encoding="UTF-8"?>
             <oor:items xmlns:oor="http://openoffice.org/2001/registry">
               <item oor:path="/org.openoffice.Office.Common/Security/Scripting">
@@ -42,6 +43,12 @@ public sealed class LibreOfficePdfEngine(string executablePath, TimeSpan? timeou
                 <prop oor:name="DisableMacrosExecution" oor:op="fuse"><value>true</value></prop>
                 <prop oor:name="DisableActiveContent" oor:op="fuse"><value>true</value></prop>
                 <prop oor:name="DisableOLEAutomation" oor:op="fuse"><value>true</value></prop>
+                <prop oor:name="RemovePersonalInfoOnSaving" oor:op="fuse"><value>true</value></prop>
+                <prop oor:name="KeepDocUserInfoOnSaving" oor:op="fuse"><value>false</value></prop>
+                <prop oor:name="KeepRedlineInfoOnSaving" oor:op="fuse"><value>false</value></prop>
+                <prop oor:name="KeepNoteAuthorDateInfoOnSaving" oor:op="fuse"><value>false</value></prop>
+                <prop oor:name="KeepDocVersionInfoOnSaving" oor:op="fuse"><value>false</value></prop>
+                <prop oor:name="KeepDocPrinterSettingsOnSaving" oor:op="fuse"><value>false</value></prop>
               </item>
             </oor:items>
             """);
@@ -55,7 +62,15 @@ public sealed class LibreOfficePdfEngine(string executablePath, TimeSpan? timeou
         try
         {
             await Task.WhenAll(process.WaitForExitAsync(linked.Token), stdout, stderr);
-            if (process.ExitCode != 0) throw new DocumentEngineException($"LibreOffice export failed (exit {process.ExitCode}). {await stderr}");
+            if (process.ExitCode != 0)
+            {
+                var code = unchecked((uint)process.ExitCode);
+                if (code is 0xC0000135 or 0xC0000142 or 0xC000007B)
+                    throw new DocumentEngineException($"LibreOffice could not initialize (0x{code:X8}). Repair the trusted LibreOffice installation and its Microsoft Visual C++ runtime, then retry.");
+                throw new DocumentEngineException($"LibreOffice export failed (exit {process.ExitCode}). {await stderr}");
+            }
+            if (!File.Exists(Path.Combine(outputFolder, Path.GetFileNameWithoutExtension(inputPath) + ".pdf")))
+                throw new DocumentEngineException($"LibreOffice returned without creating a PDF. {await stderr} {await stdout}".Trim());
         }
         catch (Exception failure)
         {
