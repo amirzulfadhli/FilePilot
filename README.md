@@ -25,6 +25,30 @@ dotnet publish src/FilePilot.App -c Release -r win-x64 --self-contained false -o
 
 Distribute the **whole folder**, including SkiaSharp's native library and the `notices` directory. This build requires the .NET 10 Desktop Runtime. Use `--self-contained true` for a larger distribution that bundles the runtime. There is no installer or code signing yet. Do not register an executable in a temporary location that will later be deleted.
 
+## Portable packages (Phase 4 in progress)
+
+From Windows with the .NET 10 SDK, Git, and PowerShell 7.2 or later:
+
+```powershell
+pwsh -NoProfile -File scripts/Build-Package.ps1
+# Optional: choose a NEW output directory inside artifacts:
+pwsh -NoProfile -File scripts/Build-Package.ps1 -OutputDirectory artifacts/packages/my-build
+
+pwsh -NoProfile -File scripts/Test-Package.ps1 -Path artifacts/packages/my-build/FilePilot-win-x64.zip
+pwsh -NoProfile -File scripts/Test-PackageTools.ps1
+```
+
+The builder runs the packaging checks, Release build, and all application tests before publishing Windows x64. It creates a fresh directory each time, refuses existing output directories and paths outside this repository's `artifacts` folder, and leaves earlier output untouched. A failed build/validation can leave diagnostic output or a `.zip.tmp`; no old packages are deleted.
+
+The finalized ZIP contains the runtime files, README, both SkiaSharp license notices, and `package-manifest.json`. Debug symbols are excluded, including the roughly 96 MB native Skia PDB otherwise included by NuGet publishing. The manifest records each file's size/SHA-256, source commit, working-tree dirty flag, runtime, and creation time. A separate `.zip.sha256` records the archive hash. Dirty builds are labeled explicitly; a clean source checkout is recommended for distribution. ZIP timestamps mean packages are not promised to be byte-for-byte reproducible.
+
+The validator checks file hashes/lengths, required runtime files and notices, duplicate/unlisted files, Windows-unsafe paths/reserved names, links, and accidental development/secret filenames. It rejects archives over 512 MiB, declared expanded totals over 1 GiB, more than 1,024 entries, and manifests over 2 MiB. It reads without extracting or executing the package. Hashes detect corruption; they do not authenticate a publisher or replace code signing. Validation checks package structure/integrity, not runtime compatibility or every malicious archive scenario.
+
+Extract the ZIP to a normal local folder, keep all its contents together, and run `FilePilot.exe`. The .NET 10 Desktop Runtime is still required. Packages are currently Windows x64 only and unsigned; no installer or automatic context-menu/startup registration is included. The builder's raw `publish/` folder is diagnostic output; distribute the validated ZIP.
+
+Verification on 2026-10-23: Release build passed with zero warnings/errors; all 118 application tests and 21 packaging checks passed. An actual Windows x64 ZIP was created and validated (about 5.6 MiB compressed / 13.3 MiB expanded for the tested build, with 10 payload files plus the manifest). Tests include damaged bytes, length mismatch, missing native codecs/notices/manifest, invalid metadata/JSON, duplicate/unlisted paths, traversal/absolute/reserved names, debug/secrets exclusion, and existing/outside output protection. Testing was local; no package has been published as a GitHub release.
+
+Remaining Phase 4 work: startup/idle-memory measurement tooling and broader extracted-package acceptance on Windows 10/11. Neither benchmark results nor Windows 10 desktop success are claimed.
 ## Floating widget
 
 ```powershell
@@ -150,7 +174,7 @@ A future local DOCX-to-PDF engine can be added separately from the view. Its for
 
 ## Verification and limitations
 
-Phase 1 was committed and pushed at `cab070dc111d215e4292eca3b5ac7e16a27942cb`. Phase 2 is committed as `926f35896292812e674c3cebbf59b6da93b50a4b` on `feature/phase-2-conversion`. Phase 3 is on `feature/phase-3-widget`.
+Phase 1 was committed and pushed at `cab070dc111d215e4292eca3b5ac7e16a27942cb`. Phase 2 is committed as `926f35896292812e674c3cebbf59b6da93b50a4b` on `feature/phase-2-conversion`. Phase 2 and Phase 3 have been pushed to GitHub. Phase 3 is committed as `4661051325465ff212e26a2b42cd8de8bcc52515` on `feature/phase-3-widget`. Phase 4 packaging work is on `feature/phase-4-distribution`.
 
 The current suite contains **118 automated tests**, including all original 28 Phase 1 tests. Coverage includes all six conversions, alpha preservation/blending, custom/default JPEG backgrounds, eight EXIF orientations and metadata checks, corrupted/truncated/mismatched inputs, animation rejection, resource limits, Unicode/spaced paths, source preservation, locks, unsafe destinations, existing/concurrent/late collisions, cleanup after simulated write failure and cancellation, UI busy-state recovery, actual WPF/theme loading, and isolated registry registration/ownership checks.
 
@@ -169,7 +193,7 @@ Unverified Phase 3 desktop flows: full favorite-folder picker/add/remove/move in
 1. Phase 1 — safe single-file Copy Path and Move File (completed).
 2. Phase 2 — Explorer registration and safe image conversion (completed).
 3. Phase 3 — floating widget, shortcut, batch conversion, rename, and favorite folders (implemented).
-4. Phase 4 — distribution hardening: repeatable Windows package creation/validation and performance measurement tooling, before an installer.
+4. Phase 4 — distribution hardening (in progress): portable package creation/validation implemented; performance measurement tooling and broader package acceptance remain, before an installer.
 5. Later — installer/signing, document conversion with a suitable local engine, and optional Windows 11 primary-menu integration. Engine licensing, deployment size, and privacy must be evaluated before adding document conversion.
 
 Windows 10 and broad hardware/accessibility acceptance remain release gates, not inferred from Windows 11 test results.
