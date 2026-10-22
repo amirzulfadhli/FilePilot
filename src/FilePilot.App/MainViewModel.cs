@@ -25,10 +25,10 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     public RelayCommand CopyPathCommand { get; }
     public string FileName => selectedFile?.Name ?? "Choose a file to get started";
     public string FullPath => selectedFile?.FullPath ?? "No file selected";
-    public string Details => selectedFile is null ? "Single-file actions · local and offline" :
+    public string Details => selectedFile is null ? "Local files · choose one or more" : IsBatch ? $"{selection.Count} files · {selection.Sum(file => file.Length):N0} bytes total" :
         $"{(string.IsNullOrEmpty(selectedFile.Extension) ? "No extension" : selectedFile.Extension.ToUpperInvariant())}  ·  {selectedFile.Length:N0} bytes  ·  Modified {selectedFile.LastWriteTime:g}";
     public string Status { get => status; private set { status = value; OnPropertyChanged(); } }
-    public bool CanMove => selectedFile is not null && !IsBusy;
+    public bool CanMove => selectedFile is not null && !IsBatch && !IsBusy;
     public bool CanChooseFile => !IsBusy;
     public bool IsBusy
     {
@@ -55,11 +55,13 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         try
         {
             selectedFile = actions.Inspect(path);
+            selection = [selectedFile];
             Status = "Ready. Move File moves this file when you confirm a destination folder.";
         }
         catch (Exception ex) when (IsExpected(ex))
         {
             selectedFile = null;
+            selection = [];
             Status = FriendlyError(ex);
         }
         ResetConversion();
@@ -71,7 +73,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         try
         {
             // Revalidate in case the file has been removed since launch.
-            copyPath(actions.Inspect(selectedFile!.FullPath).FullPath);
+            copyPath(string.Join(Environment.NewLine, selection.Select(file => actions.Inspect(file.FullPath).FullPath)));
             Status = "Success: absolute file path copied to the clipboard.";
         }
         catch (Exception ex) when (IsExpected(ex)) { Status = FriendlyError(ex); }
@@ -88,6 +90,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             var result = await Task.Run(() => actions.Move(source.FullPath, destinationFolder));
             // Preserve known metadata without a second I/O call that could obscure success.
             selectedFile = source with { FullPath = result.DestinationPath };
+            selection = [selectedFile];
             ResetConversion();
             Status = result.SourceMayRemain
                 ? "Partial result: destination created, but the source may still remain. Check both locations. FilePilot will not delete it automatically."
@@ -99,6 +102,9 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
     private void RefreshFile()
     {
+        OnPropertyChanged(nameof(SelectionSummary));
+        OnPropertyChanged(nameof(SelectionPaths));
+        OnPropertyChanged(nameof(IsBatch));
         OnPropertyChanged(nameof(FileName));
         OnPropertyChanged(nameof(FullPath));
         OnPropertyChanged(nameof(Details));

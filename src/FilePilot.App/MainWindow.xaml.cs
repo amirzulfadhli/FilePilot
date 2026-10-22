@@ -18,21 +18,21 @@ public partial class MainWindow : Window
 
     private void ChooseFile(object sender, RoutedEventArgs e)
     {
-        var picker = new OpenFileDialog { Title = "Choose a file for FilePilot", CheckFileExists = true, Multiselect = false };
-        if (picker.ShowDialog(this) == true) Model.LoadFile(picker.FileName);
+        var picker = new OpenFileDialog { Title = "Choose a file for FilePilot", CheckFileExists = true, Multiselect = true };
+        if (ShowPicker(() => picker.ShowDialog(this)) == true) { Model.LoadFiles(picker.FileNames); ShowPopup(); }
     }
 
     private async void MoveFile(object sender, RoutedEventArgs e)
     {
         if (!Model.CanMove) return;
         var picker = new OpenFolderDialog { Title = "Move file to this folder — existing files will not be replaced", Multiselect = false };
-        if (picker.ShowDialog(this) == true) await Model.MoveAsync(picker.FolderName);
+        if (ShowPicker(() => picker.ShowDialog(this)) == true) await Model.MoveAsync(picker.FolderName);
     }
 
     private void ChooseDestination(object sender, RoutedEventArgs e)
     {
         var picker = new OpenFolderDialog { Title = "Choose conversion output folder", Multiselect = false, InitialDirectory = Model.DestinationFolder };
-        if (picker.ShowDialog(this) == true) Model.SetDestinationFolder(picker.FolderName);
+        if (ShowPicker(() => picker.ShowDialog(this)) == true) Model.SetDestinationFolder(picker.FolderName);
     }
 
     private async void ConvertImage(object sender, RoutedEventArgs e) => await Model.ConvertAsync();
@@ -52,17 +52,15 @@ public partial class MainWindow : Window
     protected override void OnClosing(CancelEventArgs e)
     {
         // Keep the process alive while a move or native codec operation is running.
-        if (Model.IsBusy) e.Cancel = true;
+        if (Model.IsBusy || IsDialogOpen) e.Cancel = true;
+        else if (resident && !exiting) { e.Cancel = true; Hide(); }
         base.OnClosing(e);
     }
 
     private void ToggleTheme(object sender, RoutedEventArgs e)
     {
         darkTheme = !darkTheme;
-        Application.Current.Resources.MergedDictionaries[0] = new ResourceDictionary
-        {
-            Source = new Uri($"Themes/{(darkTheme ? "Dark" : "Light")}.xaml", UriKind.Relative)
-        };
-        ((Button)sender).Content = darkTheme ? "_Light theme" : "_Dark theme";
+        settings = settings with { DarkTheme = darkTheme };
+        ApplyTheme();
     }
 }

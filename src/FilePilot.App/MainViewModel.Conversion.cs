@@ -14,7 +14,7 @@ public sealed partial class MainViewModel
     private string? lastOutputPath;
 
     public IReadOnlyList<ImageFileFormat> OutputFormats { get; private set; } = [];
-    public double WindowHeight => IsImageSelected ? 690 : 460;
+    public double WindowHeight => IsImageSelected ? 640 : 420;
     public bool IsImageSelected => OutputFormats.Count > 0;
     public bool CanConvert => IsImageSelected && outputFormat.HasValue && !IsBusy && !string.IsNullOrEmpty(destinationFolder);
     public bool CanCancelConversion => conversionCancellation is { IsCancellationRequested: false };
@@ -42,7 +42,10 @@ public sealed partial class MainViewModel
 
     private void ResetConversion()
     {
-        OutputFormats = selectedFile is null ? [] : converter.GetOutputFormats(selectedFile.FullPath);
+        OutputFormats = selection.SelectMany(file => converter.GetOutputFormats(file.FullPath)).Distinct().ToArray();
+        ResetRename();
+        BatchDetails = "";
+        OnPropertyChanged(nameof(BatchDetails));
         outputFormat = OutputFormats.Count > 0 ? OutputFormats[0] : null;
         destinationFolder = selectedFile is null ? "" : Path.GetDirectoryName(selectedFile.FullPath)!;
         lastOutputPath = null;
@@ -82,6 +85,19 @@ public sealed partial class MainViewModel
         Status = "Converting image… Your original file will stay unchanged.";
         try
         {
+            if (IsBatch)
+            {
+                var progress = new Progress<string>(message => { if (IsBusy && ReferenceEquals(conversionCancellation, cancellation)) Status = message; });
+                var batch = await new BatchConverter(converter).ConvertAsync(selection.Select(f => f.FullPath).ToArray(),
+                    destinationFolder, outputFormat!.Value, jpegBackground, progress, cancellation.Token);
+                lastOutputPath = batch.Items.LastOrDefault(item => item.OutputPath is not null)?.OutputPath;
+                BatchDetails = string.Join(Environment.NewLine, batch.Items.Select(item => $"{Path.GetFileName(item.SourcePath)}: {item.Message}"));
+                OnPropertyChanged(nameof(BatchDetails));
+                OnPropertyChanged(nameof(LastOutputPath));
+                var saved = batch.Items.Count(item => item.OutputPath is not null);
+                Status = $"{(batch.Cancelled ? "Cancelled" : "Finished")}: {saved} saved, {batch.Items.Count - saved} skipped/failed, {selection.Count - batch.Items.Count} not processed. Originals unchanged. See batch details.";
+                return;
+            }
             var result = await converter.ConvertAsync(request, cancellation.Token);
             lastOutputPath = result.OutputPath;
             OnPropertyChanged(nameof(LastOutputPath));

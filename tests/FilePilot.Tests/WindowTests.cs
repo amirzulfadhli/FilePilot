@@ -31,11 +31,24 @@ public sealed class WindowTests
                     Assert.True(resources.Contains("TextBrush"));
                     window.Resources.MergedDictionaries.Clear();
                     window.Resources.MergedDictionaries.Add(resources);
-                    window.Measure(new Size(540, 690));
-                    window.Arrange(new Rect(0, 0, 540, 690));
+                    window.Measure(new Size(480, 640));
+                    window.Arrange(new Rect(0, 0, 480, 640));
                 }
                 Assert.IsType<MainViewModel>(window.DataContext);
                 Assert.Single(window.InputBindings);
+                Assert.Equal(WindowStyle.None, window.WindowStyle);
+                Assert.Equal(ResizeMode.NoResize, window.ResizeMode);
+                // Exercise the native HWND/DPI path: layout-only tests cannot catch height replacement.
+                window.ShowPopup();
+                Assert.True(window.IsVisible);
+                Assert.Equal(640, window.Height);
+                ((MainViewModel)window.DataContext).ClearSelection("Choose files");
+                window.ShowPopup();
+                Assert.Equal(420, window.Height);
+                var settings = new SettingsWindow(new(), _ => { });
+                settings.Measure(new Size(460, 520));
+                settings.Arrange(new Rect(0, 0, 460, 520));
+                settings.Close();
                 window.Close();
                 application.Shutdown();
             }

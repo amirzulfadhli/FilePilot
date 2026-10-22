@@ -4,6 +4,8 @@ namespace FilePilot.App;
 
 public partial class App : Application
 {
+    private Mutex? residentMutex;
+    private Widget.WidgetHost? host;
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -28,7 +30,35 @@ public partial class App : Application
         }
         var window = new MainWindow();
         MainWindow = window;
-        window.Show();
-        ((MainViewModel)window.DataContext).LoadArguments(e.Args);
+        var model = (MainViewModel)window.DataContext;
+        bool resident = e.Args.Length == 0 || e.Args.SequenceEqual(new[] { "--widget" });
+        string? notice = null;
+        var settings = new WidgetSettings();
+        try { settings = SettingsStore.Default.Load(); }
+        catch (Exception ex) when (MainViewModel.IsExpected(ex) || ex is System.Text.Json.JsonException)
+        { notice = "Settings could not be loaded; defaults are active. " + ex.Message; }
+        if (resident)
+        {
+            residentMutex = new Mutex(false, @"Local\FilePilot.Widget." + System.Security.Principal.WindowsIdentity.GetCurrent().User!.Value, out var created);
+            if (!created) { resident = false; notice = "FilePilot is already running in the notification area. This popup can still choose files."; }
+        }
+        window.Configure(resident, settings);
+        if (resident)
+        {
+            host = new Widget.WidgetHost(window);
+            window.Host = host;
+            try { host.SetShortcut(settings.Shortcut); }
+            catch (System.ComponentModel.Win32Exception ex) { notice = ex.Message; }
+            model.SetStatus($"Ready. Select files in Explorer and press {settings.Shortcut}. Escape hides this popup; use the notification icon to reopen or exit.");
+        }
+        else model.LoadArguments(e.Args);
+        if (notice is not null) model.SetStatus(notice);
+        window.ShowPopup();
+    }
+    protected override void OnExit(ExitEventArgs e)
+    {
+        host?.Dispose();
+        residentMutex?.Dispose();
+        base.OnExit(e);
     }
 }
