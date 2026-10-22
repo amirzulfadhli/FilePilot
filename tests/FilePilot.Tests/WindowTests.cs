@@ -62,6 +62,12 @@ public sealed class WindowTests
                 var settings = new SettingsWindow(new(), _ => { });
                 settings.Measure(new Size(460, 520));
                 settings.Arrange(new Rect(0, 0, 460, 520));
+                var settingsLayout = Assert.IsType<System.Windows.Controls.DockPanel>(settings.Content);
+                var settingsFooter = Assert.IsType<System.Windows.Controls.StackPanel>(settingsLayout.Children[0]);
+                Assert.Equal(System.Windows.Controls.Dock.Bottom, System.Windows.Controls.DockPanel.GetDock(settingsFooter));
+                var settingsActions = Assert.IsType<System.Windows.Controls.DockPanel>(settingsFooter.Children[1]);
+                Assert.Contains(settingsActions.Children.Cast<System.Windows.UIElement>(), child => child is System.Windows.Controls.Button { IsCancel: true });
+                Assert.Contains(settingsActions.Children.Cast<System.Windows.UIElement>(), child => child is System.Windows.Controls.Button { IsDefault: true });
                 settings.Close();
                 window.Close();
                 application.Shutdown();

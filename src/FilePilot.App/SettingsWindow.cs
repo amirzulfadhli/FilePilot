@@ -14,8 +14,13 @@ internal sealed class SettingsWindow : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         SetResourceReference(BackgroundProperty, "WindowBrush");
         SetResourceReference(ForegroundProperty, "TextBrush");
-        var panel = new StackPanel { Margin = new Thickness(20) };
-        Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        var layout = new DockPanel { LastChildFill = true };
+        Content = layout;
+        var footer = new StackPanel { Margin = new Thickness(20, 8, 20, 16) };
+        DockPanel.SetDock(footer, Dock.Bottom);
+        layout.Children.Add(footer);
+        var panel = new StackPanel { Margin = new Thickness(20, 20, 20, 8) };
+        layout.Children.Add(new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
         panel.Children.Add(new TextBlock { Text = "Widget shortcut", FontSize = 20, Margin = new Thickness(0, 0, 0, 10) });
         var shortcut = new TextBox { Text = settings.Shortcut };
         System.Windows.Automation.AutomationProperties.SetName(shortcut, "Global keyboard shortcut");
@@ -34,6 +39,7 @@ internal sealed class SettingsWindow : Window
         var remove = new Button { Content = "_Remove", Margin = new Thickness(8, 0, 0, 0) };
         buttons.Children.Add(add); buttons.Children.Add(remove);
         var status = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 8) };
+        System.Windows.Automation.AutomationProperties.SetLiveSetting(status, System.Windows.Automation.AutomationLiveSetting.Polite);
         add.Click += (_, _) =>
         {
             if (favorites.Count >= 20) { status.Text = "The limit is 20 favorites."; return; }
@@ -68,9 +74,14 @@ internal sealed class SettingsWindow : Window
             catch (Exception ex) when (MainViewModel.IsExpected(ex)) { status.Text = ex.Message; }
         };
         clearEngine.Click += (_, _) => enginePath.Clear();
-        panel.Children.Add(status);
+        footer.Children.Add(new ScrollViewer { Content = status, MaxHeight = 72, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+        var actions = new DockPanel { LastChildFill = true };
+        footer.Children.Add(actions);
+        var cancel = new Button { Content = "_Cancel", IsCancel = true, Margin = new Thickness(8, 0, 0, 0) };
+        DockPanel.SetDock(cancel, Dock.Right);
+        actions.Children.Add(cancel);
         var apply = new Button { Content = "_Save settings", IsDefault = true };
-        panel.Children.Add(apply);
+        actions.Children.Add(apply);
         apply.Click += (_, _) =>
         {
             try { save(new(shortcut.Text.Trim(), favorites.ToArray(), dark.IsChecked == true, string.IsNullOrWhiteSpace(enginePath.Text) ? null : enginePath.Text.Trim())); DialogResult = true; }

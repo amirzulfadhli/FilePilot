@@ -23,7 +23,7 @@ dotnet publish src/FilePilot.App -c Release -r win-x64 --self-contained false -o
 & .\artifacts\publish\FilePilot.exe "C:\Files\photo.png"
 ```
 
-Distribute the **whole folder**, including SkiaSharp's native library and the `notices` directory. This build requires the .NET 10 Desktop Runtime. Use `--self-contained true` for a larger distribution that bundles the runtime. There is no installer or code signing yet. Do not register an executable in a temporary location that will later be deleted.
+Distribute the **whole folder**, including SkiaSharp's native library and the `notices` directory. This build requires the .NET 10 Desktop Runtime. Use `--self-contained true` for a larger distribution that bundles the runtime. There is no signed setup executable yet. Phase 6 adds a source-checkout per-user deployment script; see [Phase 6 installation and validation](docs/phase-6-usability.md). Do not register an executable in a temporary location that will later be deleted.
 
 ## Portable packages
 
@@ -212,7 +212,7 @@ Unverified Phase 3 desktop flows: full favorite-folder picker/add/remove/move in
 3. Phase 3 — floating widget, shortcut, batch conversion, rename, and favorite folders (implemented).
 4. Phase 4 — portable packaging, startup/memory tooling, extracted-package runtime checks and resident lifecycle fix completed for the available Windows 11 host; Windows 10 is explicitly unverified.
 5. Phase 5 — optional single-DOCX → PDF conversion verified with real LibreOffice 26.8.1.1 on Windows 11, source-property minimization, short local engine workspaces, cancellation/timeout/error handling and initial widget usability checks. See docs/phase-5-documents.md for evidence and limits.
-6. Phase 6 — widget UI/UX improvements, measured performance, per-user Windows installation and stability. Installer signing and optional Windows 11 primary-menu integration remain later work.
+6. Phase 6 (in progress) — fixed Settings actions/keyboard dismissal, document action access keys, lower preflight allocations, safe per-user installation preview and installed-app performance checks. See [Phase 6 details](docs/phase-6-usability.md). Installer signing and optional Windows 11 primary-menu integration remain later work.
 
 Windows 10 and broad hardware/accessibility acceptance remain unverified release limitations, not inferred from Windows 11 test results.
 

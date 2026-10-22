@@ -19,6 +19,7 @@ internal static class DocxPreflight
             var hasContentType = false;
             long total = 0;
             long imagePixels = 0;
+            var buffer = new byte[65536];
             foreach (var entry in archive.Entries)
             {
                 token.ThrowIfCancellationRequested();
@@ -37,7 +38,6 @@ internal static class DocxPreflight
                     throw new DocumentConversionException("DOCX expanded content exceeds resource limits.");
                 await using var content = entry.Open();
                 using var xmlBytes = new MemoryStream();
-                var buffer = new byte[65536];
                 long count = 0;
                 int read;
                 while ((read = await content.ReadAsync(buffer, token)) != 0)
