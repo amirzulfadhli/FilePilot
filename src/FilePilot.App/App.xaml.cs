@@ -4,11 +4,12 @@ namespace FilePilot.App;
 
 public partial class App : Application
 {
-    private Mutex? residentMutex;
+    private Widget.ResidentInstance? residentInstance;
     private Widget.WidgetHost? host;
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        if (e.Args.Length > 0 && e.Args[0] == "--diagnostics") { RunDiagnostics(e.Args); return; }
         if (e.Args.Length == 1 && e.Args[0] is "--register-context-menu" or "--unregister-context-menu")
         {
             try
@@ -39,8 +40,8 @@ public partial class App : Application
         { notice = "Settings could not be loaded; defaults are active. " + ex.Message; }
         if (resident)
         {
-            residentMutex = new Mutex(false, @"Local\FilePilot.Widget." + System.Security.Principal.WindowsIdentity.GetCurrent().User!.Value, out var created);
-            if (!created) { resident = false; notice = "FilePilot is already running in the notification area. This popup can still choose files."; }
+            residentInstance = Widget.ResidentInstance.TryStart(@"Local\FilePilot.Widget." + System.Security.Principal.WindowsIdentity.GetCurrent().User!.Value);
+            if (residentInstance is null) { resident = false; notice = "FilePilot is already running in the notification area. This popup can still choose files."; }
         }
         window.Configure(resident, settings);
         if (resident)
@@ -55,10 +56,47 @@ public partial class App : Application
         if (notice is not null) model.SetStatus(notice);
         window.ShowPopup();
     }
+    private async void RunDiagnostics(string[] args)
+    {
+        Diagnostics.DiagnosticOptions? options = null;
+        try
+        {
+            options = Diagnostics.DiagnosticOptions.Parse(args);
+            var window = new MainWindow();
+            MainWindow = window;
+            // Isolate diagnostics from saved preferences and the ordinary resident-instance mutex.
+            window.Configure(options.Widget, new WidgetSettings());
+            window.IsEnabled = false; // The synthetic run must not start user file operations.
+            bool? hotkeyRegistered = null;
+            if (options.Widget)
+            {
+                host = new Widget.WidgetHost(window);
+                window.Host = host;
+                try { host.SetShortcut("Ctrl+Alt+F"); hotkeyRegistered = true; }
+                catch (System.ComponentModel.Win32Exception) { hotkeyRegistered = false; }
+            }
+            var rendered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            window.ContentRendered += (_, _) => rendered.TrySetResult();
+            window.ShowPopup();
+            await Diagnostics.DiagnosticRunner.RunAsync(window, options, rendered.Task, hotkeyRegistered);
+            Shutdown(0);
+        }
+        catch (Exception ex)
+        {
+            // Diagnostic mode is unattended: failures use a nonzero exit/report, never a blocking dialog.
+            if (options is not null)
+            {
+                try { Diagnostics.DiagnosticOptions.WriteReport(options.ReportPath, new { SchemaVersion = 1, Succeeded = false, Error = ex.GetType().Name + ": " + ex.Message }); }
+                catch (Exception reportError) when (MainViewModel.IsExpected(reportError)) { }
+            }
+            Shutdown(1);
+        }
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
         host?.Dispose();
-        residentMutex?.Dispose();
+        residentInstance?.Dispose();
         base.OnExit(e);
     }
 }

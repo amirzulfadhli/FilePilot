@@ -11,6 +11,13 @@ $required = @('FilePilot.exe', 'FilePilot.dll', 'FilePilot.Core.dll', 'FilePilot
     'FilePilot.runtimeconfig.json', 'SkiaSharp.dll', 'libSkiaSharp.dll', 'README.md',
     'notices/SkiaSharp-LICENSE.txt', 'notices/SkiaSharp-NATIVE-NOTICES.txt')
 $script:passed = 0
+foreach ($source in Get-ChildItem -LiteralPath $PSScriptRoot -Filter '*.ps1') {
+    $tokens = $null
+    $syntaxErrors = $null
+    [System.Management.Automation.Language.Parser]::ParseFile($source.FullName, [ref]$tokens, [ref]$syntaxErrors) | Out-Null
+    if ($syntaxErrors.Count) { throw "PowerShell syntax errors in $($source.Name): $($syntaxErrors.Message -join '; ')" }
+}
+$script:passed++
 
 function New-FixtureZip {
     param([string]$Extra, [string]$Duplicate, [string]$Corrupt, [string]$Omit, [string]$RecordPath,

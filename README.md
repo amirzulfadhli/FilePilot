@@ -25,7 +25,7 @@ dotnet publish src/FilePilot.App -c Release -r win-x64 --self-contained false -o
 
 Distribute the **whole folder**, including SkiaSharp's native library and the `notices` directory. This build requires the .NET 10 Desktop Runtime. Use `--self-contained true` for a larger distribution that bundles the runtime. There is no installer or code signing yet. Do not register an executable in a temporary location that will later be deleted.
 
-## Portable packages (Phase 4 in progress)
+## Portable packages
 
 From Windows with the .NET 10 SDK, Git, and PowerShell 7.2 or later:
 
@@ -48,7 +48,14 @@ Extract the ZIP to a normal local folder, keep all its contents together, and ru
 
 Verification on 2026-10-23: Release build passed with zero warnings/errors; all 118 application tests and 21 packaging checks passed. An actual Windows x64 ZIP was created and validated (about 5.6 MiB compressed / 13.3 MiB expanded for the tested build, with 10 payload files plus the manifest). Tests include damaged bytes, length mismatch, missing native codecs/notices/manifest, invalid metadata/JSON, duplicate/unlisted paths, traversal/absolute/reserved names, debug/secrets exclusion, and existing/outside output protection. Testing was local; no package has been published as a GitHub release.
 
-Remaining Phase 4 work: startup/idle-memory measurement tooling and broader extracted-package acceptance on Windows 10/11. Neither benchmark results nor Windows 10 desktop success are claimed.
+Phase 4 now includes opt-in startup/memory measurements and extracted-package runtime/codec acceptance. See [Phase 4 validation](docs/phase-4-validation.md) for commands, methodology, smoke budgets, measured results, and the OS test matrix. Normal launches do not profile or write reports. Windows 10 remains explicitly unverified by agreement; no Windows 10 machine/VM was available. As of 2026-10-23, Microsoft's [.NET Windows support policy](https://learn.microsoft.com/en-us/dotnet/core/install/windows) limits Windows 10 runtime support to specified LTSC/Enterprise editions, so "Windows 10/11" is not a promise for every Windows 10 installation.
+
+```powershell
+pwsh -NoProfile -File scripts/Test-ExtractedPackage.ps1 -Path artifacts/packages/my-build/FilePilot-win-x64.zip -Runs 3
+pwsh -NoProfile -File scripts/Measure-FilePilot.ps1 -ExecutablePath artifacts/packages/my-build/publish/FilePilot.exe -Runs 3
+```
+
+Close other FilePilot instances for an uncontested diagnostic shortcut. Synthetic reports/fixtures stay under `artifacts/`; no existing reports are overwritten. Final measured medians were about 1,223 ms / 67.0 MiB hidden private memory for the popup and 895 ms / 70.4 MiB for the hidden widget on this Windows 11 x64 host. These are observed baselines with runtime/OS caching, not guaranteed cold-start times or hard memory caps. Working-set figures and repeat-run maximums are documented separately. The final Phase 4 build passed all 125 application tests, 22 packaging/script checks and six extracted-package diagnostic sessions.
 ## Floating widget
 
 ```powershell
@@ -176,7 +183,7 @@ A future local DOCX-to-PDF engine can be added separately from the view. Its for
 
 Phase 1 was committed and pushed at `cab070dc111d215e4292eca3b5ac7e16a27942cb`. Phase 2 is committed as `926f35896292812e674c3cebbf59b6da93b50a4b` on `feature/phase-2-conversion`. Phase 2 and Phase 3 have been pushed to GitHub. Phase 3 is committed as `4661051325465ff212e26a2b42cd8de8bcc52515` on `feature/phase-3-widget`. Phase 4 packaging work is on `feature/phase-4-distribution`.
 
-The current suite contains **118 automated tests**, including all original 28 Phase 1 tests. Coverage includes all six conversions, alpha preservation/blending, custom/default JPEG backgrounds, eight EXIF orientations and metadata checks, corrupted/truncated/mismatched inputs, animation rejection, resource limits, Unicode/spaced paths, source preservation, locks, unsafe destinations, existing/concurrent/late collisions, cleanup after simulated write failure and cancellation, UI busy-state recovery, actual WPF/theme loading, and isolated registry registration/ownership checks.
+The current suite contains **125 automated tests**, including all original 28 Phase 1 tests. Coverage includes all six conversions, alpha preservation/blending, custom/default JPEG backgrounds, eight EXIF orientations and metadata checks, corrupted/truncated/mismatched inputs, animation rejection, resource limits, Unicode/spaced paths, source preservation, locks, unsafe destinations, existing/concurrent/late collisions, cleanup after simulated write failure and cancellation, UI busy-state recovery, actual WPF/theme loading, and isolated registry registration/ownership checks.
 
 Phase 2 verification on 2026-10-22 (Windows 11, .NET SDK 10.0.402): Release build passed with zero warnings/errors; all 84 tests passed without skips; Windows x64 publish succeeded. NuGet vulnerability auditing (including transitive dependencies) reported no known vulnerable packages in the three projects on this date. Desktop checks verified launch with a Unicode/spaced PNG path, PNG-to-JPEG and PNG-to-WebP through the UI, JPEG dimensions with the independent WPF decoder, unchanged original SHA-256, output-format selection and keyboard conversion, light/dark rendering, the final compact layout, and collision refusal with an unchanged output hash. The real registration command succeeded and all four quoted HKCU command values were inspected. Unregistration was run and all four temporary menu keys were confirmed removed. No context-menu registration is left installed.
 
@@ -193,10 +200,10 @@ Unverified Phase 3 desktop flows: full favorite-folder picker/add/remove/move in
 1. Phase 1 — safe single-file Copy Path and Move File (completed).
 2. Phase 2 — Explorer registration and safe image conversion (completed).
 3. Phase 3 — floating widget, shortcut, batch conversion, rename, and favorite folders (implemented).
-4. Phase 4 — distribution hardening (in progress): portable package creation/validation implemented; performance measurement tooling and broader package acceptance remain, before an installer.
-5. Later — installer/signing, document conversion with a suitable local engine, and optional Windows 11 primary-menu integration. Engine licensing, deployment size, and privacy must be evaluated before adding document conversion.
+4. Phase 4 — portable packaging, startup/memory tooling, extracted-package runtime checks and resident lifecycle fix completed for the available Windows 11 host; Windows 10 is explicitly unverified.
+5. Phase 5 — incremental local DOCX → PDF conversion, widget improvements and usability. Evaluate engine licensing, optional deployment size and offline behavior first. Installer/signing and optional Windows 11 primary-menu integration remain later work.
 
-Windows 10 and broad hardware/accessibility acceptance remain release gates, not inferred from Windows 11 test results.
+Windows 10 and broad hardware/accessibility acceptance remain unverified release limitations, not inferred from Windows 11 test results.
 
 ## Manual acceptance checklist
 
