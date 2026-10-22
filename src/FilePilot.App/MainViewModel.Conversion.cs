@@ -14,7 +14,7 @@ public sealed partial class MainViewModel
     private string? lastOutputPath;
 
     public IReadOnlyList<ImageFileFormat> OutputFormats { get; private set; } = [];
-    public double WindowHeight => IsImageSelected ? 640 : 420;
+    public double WindowHeight => IsImageSelected || IsDocumentSelected ? 640 : 420;
     public bool IsImageSelected => OutputFormats.Count > 0;
     public bool CanConvert => IsImageSelected && outputFormat.HasValue && !IsBusy && !string.IsNullOrEmpty(destinationFolder);
     public bool CanCancelConversion => conversionCancellation is { IsCancellationRequested: false };
@@ -32,6 +32,7 @@ public sealed partial class MainViewModel
             OnPropertyChanged();
             OnPropertyChanged(nameof(IsJpegOutput));
             OnPropertyChanged(nameof(CanConvert));
+            OnPropertyChanged(nameof(CanConvertDocument));
         }
     }
     public string JpegBackground
@@ -51,6 +52,7 @@ public sealed partial class MainViewModel
         lastOutputPath = null;
         OnPropertyChanged(nameof(OutputFormats));
         OnPropertyChanged(nameof(IsImageSelected));
+        OnPropertyChanged(nameof(IsDocumentSelected));
         OnPropertyChanged(nameof(WindowHeight));
         OnPropertyChanged(nameof(SelectedOutputFormat));
         OnPropertyChanged(nameof(IsJpegOutput));
@@ -69,6 +71,7 @@ public sealed partial class MainViewModel
             destinationFolder = folder;
             OnPropertyChanged(nameof(DestinationFolder));
             OnPropertyChanged(nameof(CanConvert));
+            OnPropertyChanged(nameof(CanConvertDocument));
         }
         catch (Exception ex) when (IsExpected(ex)) { Status = FriendlyError(ex); }
     }
@@ -116,7 +119,7 @@ public sealed partial class MainViewModel
     {
         if (!CanCancelConversion) return;
         conversionCancellation!.Cancel();
-        Status = "Cancelling… Waiting for the current codec operation to finish.";
+        Status = "Cancelling… Waiting for the current file operation to stop safely.";
         RefreshConversionState();
     }
 
@@ -125,6 +128,7 @@ public sealed partial class MainViewModel
     private void RefreshConversionState()
     {
         OnPropertyChanged(nameof(CanConvert));
+        OnPropertyChanged(nameof(CanConvertDocument));
         OnPropertyChanged(nameof(CanCancelConversion));
         OnPropertyChanged(nameof(CanOpenOutputFolder));
     }

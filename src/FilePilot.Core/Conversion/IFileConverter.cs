@@ -7,7 +7,7 @@ public sealed record ConversionResult(string OutputPath, int Width, int Height);
 public sealed record ImageConversionLimits(long MaxInputBytes = 64 * 1024 * 1024,
     long MaxPixels = 16_000_000, int MaxDimension = 16_384);
 
-// Future local document engines can implement this without depending on WPF.
+// Image-specific formats; documents use the independent IDocumentConverter contract.
 public interface IFileConverter
 {
     IReadOnlyList<ImageFileFormat> GetOutputFormats(string sourcePath);

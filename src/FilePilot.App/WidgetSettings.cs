@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace FilePilot.App;
 
-public sealed record WidgetSettings(string Shortcut = "Ctrl+Alt+F", string[]? FavoriteFolders = null, bool DarkTheme = false);
+public sealed record WidgetSettings(string Shortcut = "Ctrl+Alt+F", string[]? FavoriteFolders = null, bool DarkTheme = false, string? LibreOfficePath = null);
 
 public sealed class SettingsStore(string path)
 {
@@ -33,6 +33,8 @@ public sealed class SettingsStore(string path)
     private static void Validate(WidgetSettings settings)
     {
         HotkeyGesture.Parse(settings.Shortcut);
+        if (settings.LibreOfficePath is not null && (settings.LibreOfficePath.Length > 1024 || !Path.IsPathFullyQualified(settings.LibreOfficePath) || !Path.GetFileName(settings.LibreOfficePath).Equals("soffice.com", StringComparison.OrdinalIgnoreCase)))
+            throw new ArgumentException("Choose a full path to a trusted LibreOffice program/soffice.com, or clear the optional engine.");
         if ((settings.FavoriteFolders?.Length ?? 0) > 20 || (settings.FavoriteFolders ?? []).Any(p => string.IsNullOrWhiteSpace(p) || p.Length > 1024))
             throw new ArgumentException("Keep at most 20 favorite folders, each with a valid path.");
     }

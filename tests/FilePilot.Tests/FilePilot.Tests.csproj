@@ -13,5 +13,10 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <ProjectReference Include="../../src/FilePilot.App/FilePilot.App.csproj" />
+    <ProjectReference Include="../FilePilot.EngineFixture/FilePilot.EngineFixture.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
+  <Target Name="CopyDocumentEngineFixture" AfterTargets="Build">
+    <ItemGroup><EngineFixtureFiles Include="../FilePilot.EngineFixture/bin/$(Configuration)/net10.0/*" /></ItemGroup>
+    <Copy SourceFiles="@(EngineFixtureFiles)" DestinationFolder="$(OutDir)EngineFixture" />
+  </Target>
 </Project>

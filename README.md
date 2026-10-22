@@ -56,6 +56,14 @@ pwsh -NoProfile -File scripts/Measure-FilePilot.ps1 -ExecutablePath artifacts/pa
 ```
 
 Close other FilePilot instances for an uncontested diagnostic shortcut. Synthetic reports/fixtures stay under `artifacts/`; no existing reports are overwritten. Final measured medians were about 1,223 ms / 67.0 MiB hidden private memory for the popup and 895 ms / 70.4 MiB for the hidden widget on this Windows 11 x64 host. These are observed baselines with runtime/OS caching, not guaranteed cold-start times or hard memory caps. Working-set figures and repeat-run maximums are documented separately. The final Phase 4 build passed all 125 application tests, 22 packaging/script checks and six extracted-package diagnostic sessions.
+## DOCX → PDF (Phase 5 in progress)
+
+The first document-conversion slice is implemented on `feature/phase-5-documents`. It uses an optional local LibreOffice installation selected in Settings (`program/soffice.com`), keeping the engine outside FilePilot's lightweight package. Single DOCX files expose an Export PDF panel with destination, cancellation, collision protection and Open folder. Without a configured engine, existing file/image actions work and PDF export explains the setup requirement.
+
+See [Phase 5 setup, safety boundaries and validation](docs/phase-5-documents.md) before using it. The initial policy refuses external links, active/embedded content and unsupported media. Real LibreOffice rendering has **not** been verified here; the machine has no discovered engine. Adapter/process tests use an isolated test-only executable, not a document renderer. PDF layout/font fidelity and document metadata scrubbing remain unverified. This phase is still in progress.
+
+Ctrl+O opens the file picker. Escape closes an open format/favorite dropdown before dismissing the widget; single-file views hide empty batch details.
+
 ## Floating widget
 
 ```powershell
@@ -163,12 +171,14 @@ src/FilePilot.Core/
   Conversion/ImageFileConverter                 Header checks, decoding, orientation, encoding
   Conversion/AtomicOutput                       Temporary output and no-overwrite finalization
   Conversion/BatchConverter, FileRename          Sequential batches and safe single-file rename
+  Documents/                                    DOCX preflight, PDF finalization and optional local engine
 src/FilePilot.App/
   MainViewModel + MainViewModel.Conversion        Selection, actions, busy/cancellation state
   MainWindow, App, Themes                         WPF controls and native dialogs
   ExplorerIntegration                           Explicit HKCU registration commands
   Widget/                                       Shortcut, Explorer snapshot, monitor placement, tray lifecycle
-  WidgetSettings, SettingsWindow                 Local preferences and folder favorites
+  WidgetSettings, SettingsWindow                 Local preferences, folder favorites and optional engine
+  MainViewModel.Documents                        Single-document export state and cancellation
 tests/FilePilot.Tests/                           Core, registry, view-model, and WPF loading tests
 notices/                                        Packaged third-party license notices
 ```
@@ -177,13 +187,13 @@ There is no MVVM framework or DI container. The converter is constructor-injecta
 
 The sole new direct runtime package is **SkiaSharp 4.153.1**, a maintained MIT-licensed .NET wrapper for native Skia. Its NuGet dependencies supply native assets; publishing with `-r win-x64` selects the Windows architecture. No WPF-specific Skia view package is needed. SkiaSharp was chosen because currently maintained ImageSharp packages require build-time license setup; no older unpatched package or license-enforcement bypass is used. Keep native codecs updated. NuGet restore needs network access unless packages are cached; normal application use is offline.
 
-A future local DOCX-to-PDF engine can be added separately from the view. Its format contract and engine deployment/cancellation requirements should be designed when that feature is undertaken; Phase 2's format selector is deliberately image-specific.
+Document conversion now has a separate `IDocumentConverter` / `IDocumentPdfEngine` contract, bounded DOCX preflight and optional LibreOffice adapter; the image format selector stays image-specific. See the Phase 5 document for the initial engine/deployment/cancellation policy and unverified real-engine behavior.
 
 ## Verification and limitations
 
 Phase 1 was committed and pushed at `cab070dc111d215e4292eca3b5ac7e16a27942cb`. Phase 2 is committed as `926f35896292812e674c3cebbf59b6da93b50a4b` on `feature/phase-2-conversion`. Phase 2 and Phase 3 have been pushed to GitHub. Phase 3 is committed as `4661051325465ff212e26a2b42cd8de8bcc52515` on `feature/phase-3-widget`. Phase 4 packaging work is on `feature/phase-4-distribution`.
 
-The current suite contains **125 automated tests**, including all original 28 Phase 1 tests. Coverage includes all six conversions, alpha preservation/blending, custom/default JPEG backgrounds, eight EXIF orientations and metadata checks, corrupted/truncated/mismatched inputs, animation rejection, resource limits, Unicode/spaced paths, source preservation, locks, unsafe destinations, existing/concurrent/late collisions, cleanup after simulated write failure and cancellation, UI busy-state recovery, actual WPF/theme loading, and isolated registry registration/ownership checks.
+The current suite contains **156 automated tests**, including all original 28 Phase 1 tests. Coverage includes all six conversions, alpha preservation/blending, custom/default JPEG backgrounds, eight EXIF orientations and metadata checks, corrupted/truncated/mismatched inputs, animation rejection, resource limits, Unicode/spaced paths, source preservation, locks, unsafe destinations, existing/concurrent/late collisions, cleanup after simulated write failure and cancellation, UI busy-state recovery, actual WPF/theme loading, and isolated registry registration/ownership checks.
 
 Phase 2 verification on 2026-10-22 (Windows 11, .NET SDK 10.0.402): Release build passed with zero warnings/errors; all 84 tests passed without skips; Windows x64 publish succeeded. NuGet vulnerability auditing (including transitive dependencies) reported no known vulnerable packages in the three projects on this date. Desktop checks verified launch with a Unicode/spaced PNG path, PNG-to-JPEG and PNG-to-WebP through the UI, JPEG dimensions with the independent WPF decoder, unchanged original SHA-256, output-format selection and keyboard conversion, light/dark rendering, the final compact layout, and collision refusal with an unchanged output hash. The real registration command succeeded and all four quoted HKCU command values were inspected. Unregistration was run and all four temporary menu keys were confirmed removed. No context-menu registration is left installed.
 
@@ -201,7 +211,7 @@ Unverified Phase 3 desktop flows: full favorite-folder picker/add/remove/move in
 2. Phase 2 — Explorer registration and safe image conversion (completed).
 3. Phase 3 — floating widget, shortcut, batch conversion, rename, and favorite folders (implemented).
 4. Phase 4 — portable packaging, startup/memory tooling, extracted-package runtime checks and resident lifecycle fix completed for the available Windows 11 host; Windows 10 is explicitly unverified.
-5. Phase 5 — incremental local DOCX → PDF conversion, widget improvements and usability. Evaluate engine licensing, optional deployment size and offline behavior first. Installer/signing and optional Windows 11 primary-menu integration remain later work.
+5. Phase 5 (in progress) — first optional DOCX → PDF adapter/UI and widget usability slice implemented; real-engine rendering/metadata acceptance remains. Installer/signing and optional Windows 11 primary-menu integration remain later work.
 
 Windows 10 and broad hardware/accessibility acceptance remain unverified release limitations, not inferred from Windows 11 test results.
 

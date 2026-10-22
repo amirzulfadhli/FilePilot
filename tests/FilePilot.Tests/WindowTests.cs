@@ -36,6 +36,8 @@ public sealed class WindowTests
                 }
                 Assert.IsType<MainViewModel>(window.DataContext);
                 Assert.Single(window.InputBindings);
+                Assert.Single(window.CommandBindings);
+                Assert.Equal(System.Windows.Input.ApplicationCommands.Open, ((System.Windows.Input.CommandBinding)window.CommandBindings[0]).Command);
                 Assert.Equal(WindowStyle.None, window.WindowStyle);
                 Assert.Equal(ResizeMode.NoResize, window.ResizeMode);
                 // Exercise the native HWND/DPI path: layout-only tests cannot catch height replacement.
@@ -45,6 +47,18 @@ public sealed class WindowTests
                 ((MainViewModel)window.DataContext).ClearSelection("Choose files");
                 window.ShowPopup();
                 Assert.Equal(420, window.Height);
+                var docFixture = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "FilePilot-doc-layout-" + Guid.NewGuid().ToString("N") + ".docx");
+                System.IO.File.WriteAllText(docFixture, "Metadata-only document fixture");
+                try
+                {
+                    var model = (MainViewModel)window.DataContext;
+                    model.LoadFile(docFixture);
+                    Assert.True(model.IsDocumentSelected);
+                    Assert.False(model.CanConvertDocument);
+                    window.ShowPopup();
+                    Assert.Equal(640, window.Height);
+                }
+                finally { System.IO.File.Delete(docFixture); }
                 var settings = new SettingsWindow(new(), _ => { });
                 settings.Measure(new Size(460, 520));
                 settings.Arrange(new Rect(0, 0, 460, 520));

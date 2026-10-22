@@ -14,9 +14,10 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     private bool isBusy;
     private string status = "Launch FilePilot with one absolute file path, or choose a file.";
 
-    public MainViewModel(Action<string> copyPath, FilePilot.Core.Conversion.IFileConverter? converter = null)
+    public MainViewModel(Action<string> copyPath, FilePilot.Core.Conversion.IFileConverter? converter = null, FilePilot.Core.Documents.IDocumentConverter? documentConverter = null)
     {
         this.copyPath = copyPath;
+        this.documentConverter = documentConverter;
         this.converter = converter ?? new FilePilot.Core.Conversion.ImageFileConverter();
         CopyPathCommand = new RelayCommand(CopyPath, () => selectedFile is not null && !IsBusy);
     }
@@ -119,6 +120,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     {
         FileCollisionException => ex.Message,
         FilePilot.Core.Conversion.ImageConversionException => ex.Message,
+        FilePilot.Core.Documents.DocumentConversionException => ex.Message,
         UnauthorizedAccessException => "Access denied. Choose a file and folder you have permission to use.",
         FileNotFoundException or DirectoryNotFoundException => "The file or folder no longer exists. Choose it again.",
         COMException => "The clipboard is busy or unavailable. Try Copy Path again.",

@@ -28,7 +28,7 @@ public sealed partial class MainViewModel
             if (list.Length is < 1 or > BatchConverter.MaxFiles) throw new ArgumentException("Choose 1–100 local files.");
             selection = list.Distinct(StringComparer.OrdinalIgnoreCase).Select(actions.Inspect).ToArray();
             selectedFile = selection[0];
-            Status = IsBatch ? $"{selection.Count} files ready. Conversion is sequential; existing outputs are never replaced." : "Ready. Choose an action.";
+            Status = IsBatch ? $"{selection.Count} files ready. Image conversion is sequential; DOCX export requires a single selection. Existing outputs are never replaced." : "Ready. Choose an action.";
         }
         catch (Exception ex) when (IsExpected(ex)) { ClearSelection(FriendlyError(ex)); return; }
         ResetConversion();

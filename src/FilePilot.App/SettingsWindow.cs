@@ -51,12 +51,29 @@ internal sealed class SettingsWindow : Window
         var dark = new CheckBox { Content = "Dark theme", IsChecked = settings.DarkTheme };
         dark.SetResourceReference(ForegroundProperty, "TextBrush");
         panel.Children.Add(dark);
+        panel.Children.Add(new TextBlock { Text = "Optional DOCX → PDF engine", FontSize = 16, Margin = new Thickness(0, 14, 0, 6) });
+        panel.Children.Add(new TextBlock { Text = "Select program/soffice.com from a trusted LibreOffice installation. The engine stays separate from FilePilot.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6) });
+        var enginePath = new TextBox { Text = settings.LibreOfficePath ?? "", MaxLength = 1024 };
+        System.Windows.Automation.AutomationProperties.SetName(enginePath, "LibreOffice executable path");
+        panel.Children.Add(enginePath);
+        var engineButtons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
+        var chooseEngine = new Button { Content = "Choose engine…" };
+        var clearEngine = new Button { Content = "Clear", Margin = new Thickness(6, 0, 0, 0) };
+        engineButtons.Children.Add(chooseEngine); engineButtons.Children.Add(clearEngine); panel.Children.Add(engineButtons);
+        chooseEngine.Click += (_, _) =>
+        {
+            var picker = new OpenFileDialog { Title = "Choose LibreOffice program/soffice.com", Filter = "LibreOffice CLI (soffice.com)|soffice.com", CheckFileExists = true };
+            if (picker.ShowDialog(this) != true) return;
+            try { enginePath.Text = FilePilot.Core.Documents.LibreOfficePdfEngine.ValidateExecutable(picker.FileName); }
+            catch (Exception ex) when (MainViewModel.IsExpected(ex)) { status.Text = ex.Message; }
+        };
+        clearEngine.Click += (_, _) => enginePath.Clear();
         panel.Children.Add(status);
         var apply = new Button { Content = "_Save settings", IsDefault = true };
         panel.Children.Add(apply);
         apply.Click += (_, _) =>
         {
-            try { save(new(shortcut.Text.Trim(), favorites.ToArray(), dark.IsChecked == true)); DialogResult = true; }
+            try { save(new(shortcut.Text.Trim(), favorites.ToArray(), dark.IsChecked == true, string.IsNullOrWhiteSpace(enginePath.Text) ? null : enginePath.Text.Trim())); DialogResult = true; }
             catch (Exception ex) when (MainViewModel.IsExpected(ex) || ex is System.ComponentModel.Win32Exception)
             { status.Text = ex.Message; }
         };

@@ -6,6 +6,7 @@
         Foreground="{DynamicResource TextBrush}" FontFamily="Segoe UI" FontSize="14">
     <WindowChrome.WindowChrome><WindowChrome CaptionHeight="0" CornerRadius="12" ResizeBorderThickness="0" GlassFrameThickness="0" /></WindowChrome.WindowChrome>
     <Window.Resources><BooleanToVisibilityConverter x:Key="BooleanVisibility" /></Window.Resources>
+    <Window.CommandBindings><CommandBinding Command="ApplicationCommands.Open" Executed="OpenFilesCommand" CanExecute="CanOpenFilesCommand" /></Window.CommandBindings>
     <Window.InputBindings>
         <KeyBinding Key="C" Modifiers="Control+Shift" Command="{Binding CopyPathCommand}" />
     </Window.InputBindings>
@@ -78,9 +79,24 @@
             </Grid>
             <ProgressBar Height="3" Margin="0,8,0,0" IsIndeterminate="{Binding IsBusy}" Visibility="{Binding IsBusy, Converter={StaticResource BooleanVisibility}}" AutomationProperties.Name="File operation in progress" />
         </StackPanel>
-        <Expander Header="Batch details" Margin="0,8,0,0"><TextBox Text="{Binding BatchDetails, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" MaxHeight="160" VerticalScrollBarVisibility="Auto" AutomationProperties.Name="Batch results" /></Expander>
+        <StackPanel Margin="0,12,0,0" Visibility="{Binding IsDocumentSelected, Converter={StaticResource BooleanVisibility}}">
+            <TextBlock Text="DOCX → PDF · PREVIEW" FontSize="12" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding DocumentEngineStatus}" TextWrapping="Wrap" FontSize="12" Margin="0,6,0,8" Foreground="{DynamicResource MutedBrush}" />
+            <DockPanel IsEnabled="{Binding CanChooseFile}" Margin="0,0,0,8">
+                <Button DockPanel.Dock="Right" Content="Output folder…" Click="ChooseDestination" Margin="8,0,0,0" />
+                <TextBox Text="{Binding DestinationFolder, Mode=OneWay}" IsReadOnly="True" AutomationProperties.Name="PDF output folder" ToolTip="{Binding DestinationFolder}" />
+            </DockPanel>
+            <UniformGrid Columns="3">
+                <Button Content="Export _PDF" Click="ConvertDocument" IsEnabled="{Binding CanConvertDocument}" Margin="0,0,4,0" />
+                <Button Content="Cancel export" Click="CancelConversion" IsEnabled="{Binding CanCancelConversion}" Margin="2,0,2,0" />
+                <Button Content="Open PDF folder" Click="OpenOutputFolder" IsEnabled="{Binding CanOpenOutputFolder}" Margin="4,0,0,0" />
+            </UniformGrid>
+            <ProgressBar Height="3" Margin="0,8,0,0" IsIndeterminate="{Binding IsBusy}" Visibility="{Binding IsBusy, Converter={StaticResource BooleanVisibility}}" AutomationProperties.Name="Document export in progress" />
+            <TextBlock Text="Single DOCX only. External links, macros and embedded objects are refused in this first version." TextWrapping="Wrap" FontSize="11" Margin="0,8,0,0" Foreground="{DynamicResource MutedBrush}" />
+        </StackPanel>
+        <Expander Header="Batch details" Visibility="{Binding IsBatch, Converter={StaticResource BooleanVisibility}}" Margin="0,8,0,0"><TextBox Text="{Binding BatchDetails, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" MaxHeight="160" VerticalScrollBarVisibility="Auto" AutomationProperties.Name="Batch results" /></Expander>
         </StackPanel></ScrollViewer>
         <ScrollViewer Grid.Row="2" MinHeight="58" MaxHeight="100" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><TextBlock Text="{Binding Status}" Margin="0,16,0,8" TextWrapping="Wrap"
                    AutomationProperties.LiveSetting="Polite" /></ScrollViewer>
-        <DockPanel Grid.Row="3"><Button DockPanel.Dock="Right" Content="E_xit" Click="ExitApplication" Padding="10,8" Margin="6,0,0,0" ToolTip="Stop FilePilot and release its shortcut" /><Button DockPanel.Dock="Right" Content="C_hoose files…" Click="ChooseFile" IsEnabled="{Binding CanChooseFile}" /><TextBlock x:Name="ShortcutHint" Text="ESC TO DISMISS" FontSize="10" VerticalAlignment="Center" Foreground="{DynamicResource MutedBrush}" /></DockPanel>
+        <DockPanel Grid.Row="3"><Button DockPanel.Dock="Right" Content="E_xit" Click="ExitApplication" Padding="10,8" Margin="6,0,0,0" ToolTip="Stop FilePilot and release its shortcut" /><Button DockPanel.Dock="Right" Content="C_hoose files…" ToolTip="Choose one or more files (Ctrl+O)" Click="ChooseFile" IsEnabled="{Binding CanChooseFile}" /><TextBlock x:Name="ShortcutHint" Text="ESC TO DISMISS" FontSize="10" VerticalAlignment="Center" Foreground="{DynamicResource MutedBrush}" /></DockPanel>
     </Grid></Border></Window>

@@ -24,6 +24,7 @@ public partial class MainWindow
     {
         Favorites.ItemsSource = settings.FavoriteFolders ?? [];
         if (Favorites.Items.Count > 0) Favorites.SelectedIndex = 0;
+        Model.ConfigureDocumentEngine(settings.LibreOfficePath);
         darkTheme = settings.DarkTheme;
         ApplyTheme();
         ShortcutHint.Text = resident ? settings.Shortcut + " · ESC TO HIDE" : "ESC TO CLOSE";
@@ -59,12 +60,22 @@ public partial class MainWindow
     }
     private void PopupKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape) { e.Handled = true; Dismiss(); }
+        if (e.Key != Key.Escape) return;
+        e.Handled = true;
+        if (OutputFormat.IsDropDownOpen || Favorites.IsDropDownOpen)
+        {
+            OutputFormat.IsDropDownOpen = false;
+            Favorites.IsDropDownOpen = false;
+            return;
+        }
+        Dismiss();
     }
     private void DragHeader(object sender, MouseButtonEventArgs e)
     {
         if (e.OriginalSource is System.Windows.Controls.TextBlock && e.LeftButton == MouseButtonState.Pressed) DragMove();
     }
+    private void CanOpenFilesCommand(object sender, CanExecuteRoutedEventArgs e) { e.CanExecute = Model.CanChooseFile; e.Handled = true; }
+    private void OpenFilesCommand(object sender, ExecutedRoutedEventArgs e) => ChooseFile(sender, e);
     private void OpenSettings(object sender, RoutedEventArgs e) => ShowSettings();
     internal void ShowSettings()
     {
@@ -96,6 +107,7 @@ public partial class MainWindow
         finally { IsDialogOpen = false; }
     }
     private async void RenameFile(object sender, RoutedEventArgs e) => await Model.RenameAsync();
+    private async void ConvertDocument(object sender, RoutedEventArgs e) => await Model.ConvertDocumentAsync();
     private void FavoriteOutput(object sender, RoutedEventArgs e)
     {
         if (Favorites.SelectedItem is string folder) Model.SetDestinationFolder(folder);
