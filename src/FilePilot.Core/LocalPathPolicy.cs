@@ -44,7 +44,7 @@ public static class LocalPathPolicy
     {
         var attributes = File.GetAttributes(path);
         if ((attributes & FileAttributes.ReparsePoint) != 0)
-            throw new ArgumentException("Symbolic links, junctions, and cloud placeholders are not supported in Phase 1. Choose a regular local file or folder.");
+            throw new ArgumentException("Symbolic links, junctions, and cloud placeholders are not supported. Choose a regular local file or folder.");
         if ((attributes & FileAttributes.Offline) != 0)
             throw new ArgumentException("This file is offline. Choose a file already stored on this computer.");
     }

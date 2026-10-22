@@ -29,9 +29,29 @@ public partial class MainWindow : Window
         if (picker.ShowDialog(this) == true) await Model.MoveAsync(picker.FolderName);
     }
 
+    private void ChooseDestination(object sender, RoutedEventArgs e)
+    {
+        var picker = new OpenFolderDialog { Title = "Choose conversion output folder", Multiselect = false, InitialDirectory = Model.DestinationFolder };
+        if (picker.ShowDialog(this) == true) Model.SetDestinationFolder(picker.FolderName);
+    }
+
+    private async void ConvertImage(object sender, RoutedEventArgs e) => await Model.ConvertAsync();
+    private void CancelConversion(object sender, RoutedEventArgs e) => Model.CancelConversion();
+
+    private void OpenOutputFolder(object sender, RoutedEventArgs e)
+    {
+        if (!Model.CanOpenOutputFolder) return;
+        try
+        {
+            var folder = FilePilot.Core.LocalPathPolicy.Validate(System.IO.Path.GetDirectoryName(Model.LastOutputPath)!);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(folder) { UseShellExecute = true });
+        }
+        catch (Exception ex) when (MainViewModel.IsExpected(ex) || ex is System.ComponentModel.Win32Exception)
+        { Model.ReportUiError(ex); }
+    }
     protected override void OnClosing(CancelEventArgs e)
     {
-        // Do not terminate the process in the middle of an uncancellable native move.
+        // Keep the process alive while a move or native codec operation is running.
         if (Model.IsBusy) e.Cancel = true;
         base.OnClosing(e);
     }

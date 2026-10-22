@@ -1,97 +1,146 @@
 # FilePilot
 
-A small, local Windows file-action utility built with C# / .NET 10 and WPF. **Phase 1 only:** launch with one file, inspect its details, copy its absolute path, and move it to an existing folder. No service, accounts, network calls, telemetry, or administrator privileges are needed by the app.
+A local Windows 10/11 file-action utility built with C# / .NET 10 and WPF. Phase 1 provides file details, Copy Path, and safe Move File. Phase 2 adds per-user Explorer integration and PNG/JPEG/WebP conversion. No background service, cloud API, accounts, database, telemetry, or administrator privileges are required by the application.
 
-## Feasibility and architecture
+## Build and run
 
-The proposed stack is a good fit. WPF supplies native Windows windows, keyboard support, clipboard access, and an `OpenFolderDialog` without extra runtime packages. Normal file operations use .NET APIs. Keep the process short-lived: one window per invocation, exiting when it closes.
-
-```text
-FilePilot.slnx
-src/
-  FilePilot.Core/       Path policy, metadata, safe file actions; no WPF dependency
-  FilePilot.App/        WPF views, themes, small view model, OS dialogs/clipboard
-tests/
-  FilePilot.Tests/      xUnit integration tests using isolated temporary files
-```
-
-The view model owns selection and user-facing state. Code-behind handles Windows-specific UI (dialogs, clipboard, theme selection). The core library owns validation and file operations. This avoids an MVVM framework, DI container, and background service. Tests are the only third-party dependencies.
-
-## Setup, build, and run
-
-Requires Windows 10/11 and the .NET 10 SDK with WPF / Windows Desktop support. Normal execution requires only the .NET 10 **Desktop** Runtime. Use PowerShell in this repository:
+Install the .NET 10 SDK with Windows Desktop support. From the repository directory in PowerShell:
 
 ```powershell
 dotnet restore FilePilot.slnx
 dotnet build FilePilot.slnx -c Release
 dotnet test FilePilot.slnx -c Release
 
-dotnet run --project src/FilePilot.App -c Release -- "C:\Users\you\Pictures\photo.png"
+dotnet run --project src/FilePilot.App -c Release -- "C:\Files\photo with spaces.png"
 ```
 
-Quote paths with spaces. Pass exactly one absolute local path. With no argument, the app opens with actions disabled and a Choose file button. Missing, unsupported, or multiple paths produce inline guidance. Files do not need an image extension for Phase 1.
+Pass exactly one absolute local file path, including quotes around paths with spaces. Unicode names are supported. With no argument, choose a file in the app. Unsupported image extensions can still use Copy Path and Move File.
 
-To create a framework-dependent executable folder:
+Create a Windows x64 distribution folder:
 
 ```powershell
 dotnet publish src/FilePilot.App -c Release -r win-x64 --self-contained false -o artifacts/publish
-& .\artifacts\publish\FilePilot.exe "C:\Files\example.txt"
+& .\artifacts\publish\FilePilot.exe "C:\Files\photo.png"
 ```
 
-Distribute the whole publish folder, not just its executable. A self-contained build is possible with `--self-contained true`, at the cost of a larger download. There is no installer or registry modification in Phase 1.
+Distribute the **whole folder**, including SkiaSharp's native library and the `notices` directory. This build requires the .NET 10 Desktop Runtime. Use `--self-contained true` for a larger distribution that bundles the runtime. There is no installer or code signing yet. Do not register an executable in a temporary location that will later be deleted.
 
-## Using Phase 1
+## Explorer context menu
 
-- **Copy Path** copies the full, unquoted path. Shortcut: Ctrl+Shift+C; Alt+C also activates the button.
-- **Move File** opens the Windows folder picker. Selecting a folder commits the move. Cancellation does nothing. A collision refuses the move; choose another folder.
-- File details and subsequent Copy Path operations follow the new location after a successful move.
-- **Choose file** changes the selection. **Dark theme / Light theme** switches the palette for the current session.
-- Tab / Shift+Tab, Enter / Space, and button access keys provide keyboard navigation.
+Registration is explicit and per user. Run the published executable from its final location:
 
-## Safety model
+```powershell
+& .\artifacts\publish\FilePilot.exe --register-context-menu
+& .\artifacts\publish\FilePilot.exe --unregister-context-menu
+```
 
-- Only existing regular files and destination folders on fixed, removable, or RAM drives are accepted. UNC paths, mapped network drives, device paths, alternate data streams, traversal segments, reserved names, and paths through reparse points are rejected. This intentionally excludes junctions, symbolic links, and many cloud placeholders.
-- Destination names are derived solely from the source filename. No free-text destination filename is accepted.
-- Moves use `File.Move(source, destination, overwrite: false)`. The OS enforces no replacement even if a destination appears after validation. Directory-name collisions are also rejected. Moving to the same folder is refused.
-- .NET delegates cross-volume moves to Windows copy/delete behavior: the source is removed only after copying succeeds. If the source remains, FilePilot reports a partial result, retains both files, and selects the destination. It never retries source deletion automatically.
-- Windows may leave a partial destination after a failed cross-volume copy (for example, an unplugged drive). FilePilot does not automatically remove it. Inspect both locations before retrying; collisions continue to block replacement.
-- Move runs on a worker thread; file-changing actions and window closing are disabled until it completes. There is no cancellation after starting a move.
-- Permission and locked-file failures are reported inline. The app never requests elevation to get around them.
-- Validation is a guardrail against mistaken paths, not a security boundary against another process maliciously replacing filesystem entries between checks. Cloud sync software and filesystem filters may still run independently of FilePilot. Do not use this prototype for adversarial shared directories.
+Each command shows a success or failure dialog and exits (0 for success, 1 for failure). To wait for its result in a script:
 
-## Manual acceptance check
+```powershell
+$process = Start-Process .\artifacts\publish\FilePilot.exe -ArgumentList '--register-context-menu' -Wait -PassThru
+$process.ExitCode
+```
 
-Use disposable files, not your originals. Create a source folder and two destination folders.
+Right-click a `.png`, `.jpg`, `.jpeg`, or `.webp` file and choose **FilePilot**. On Windows 11, use **Show more options**. This is a classic static shell verb; no COM extension or primary-menu integration is installed.
 
-1. Launch with a filename containing spaces and Unicode. Verify name, extension, byte count, and modification time.
-2. Activate Copy Path; paste into a text editor and compare with the full path.
-3. Move to an empty destination. Verify contents, disappearance from the source, updated displayed path, and Copy Path at the new location.
-4. Place a different file of the same name in the next destination. Attempt the move; verify both contents remain unchanged.
-5. Cancel the folder picker; verify nothing changes. Choose the current folder; verify a clear refusal.
-6. Open a file with an exclusive lock and attempt the move. Verify an error and preservation of the source. Retry after releasing the lock.
-7. Check no argument, missing file, a directory, multiple arguments, and an unsupported network path.
-8. Check both themes, keyboard navigation, long paths, display scaling, and a narrow window.
-9. Before release, exercise a real second local volume, disk-full/unplugged-drive failures, restricted ACLs, and Windows 10/11 separately.
+Only these per-user locations are written:
 
-Automated tests use isolated temporary files and delete only their own fixtures. They do not modify the real clipboard. UI smoke testing is separate from automated tests.
+```text
+HKCU\Software\Classes\SystemFileAssociations\<extension>\shell\FilePilot
+HKCU\Software\Classes\SystemFileAssociations\<extension>\shell\FilePilot\command
+```
 
-## Incremental roadmap
+The command is `"C:\Full Path\FilePilot.exe" "%1"`: the executable and the one selected path are separately quoted. `MultiSelectModel=Single` requests single selection; the menu should be absent for multiple selections. The application also rejects multiple arguments. Selection of multiple files, folders, network items, and shell virtual items is not supported.
 
-1. **Phase 1 (this repository):** path launch, file details, Copy Path, safe Move File, basic themes, tests.
-2. **Explorer integration:** opt-in per-user `HKCU\Software\Classes\*\shell\FilePilot` registration with a quoted executable and `"%1"`, plus uninstall support. Initially use Windows 11's Show more options menu. Add cursor-adjacent placement with per-monitor DPI and work-area clamping. Keep installation out of ordinary startup.
-3. **Conversion:** introduce `IFileConverter` with supported input/output formats and an asynchronous conversion operation. Select a maintained image library after reviewing its current license, deployment size, decoder limits, and security maintenance. Do not install it before this stage. Implement one PNG-to-JPG path first, then the other requested pairs. Use signature checks, dimensions/pixel limits, explicit JPEG background compositing, an output picker, temporary output, and no-overwrite finalization. Preserve originals; require explicit confirmation for any future replacement workflow. Test transparency, malformed input, mismatched extensions, collisions, and output integrity.
-4. **Rename and favorite folders:** validated leaf names, extension preservation, collisions, case-only rename handling, and a small local JSON settings file for favorite destinations/theme. No database.
-5. **Packaging:** signing, installer/uninstaller, real Windows 10/11 and multi-volume testing, accessibility and startup/memory measurements.
+Registration/unregistration are repeatable. An ownership marker prevents replacing or removing an unrelated entry with the same name. Only FilePilot's verb keys are removed; file associations, default programs, and other verbs are preserved. No HKLM changes and no Explorer restart occur. A shell association-change notification is sent; if Explorer caches an old menu, close that menu and reopen it. If you move the published app, register it again at the new path. Registration paths containing a percent sign are rejected to avoid ambiguity with shell substitution.
 
-DOCX-to-PDF should be another `IFileConverter` implementation backed by a separately selected local engine. Keep process invocation, engine availability, timeout, and temporary-file cleanup behind that implementation; do not assume Microsoft Office is installed. An engine such as LibreOffice would add a substantial deployment and maintenance dependency, so choose it in a later phase.
+## Image conversion
 
-## Verification on this machine
+| Input | Available outputs |
+| --- | --- |
+| PNG | JPG, WebP |
+| JPG / JPEG | PNG, WebP |
+| WebP | PNG, JPG |
 
-On 2026-10-21, Release build and all 28 automated tests passed on Windows 11 with .NET SDK 10.0.402. The tests include loading the actual WPF window and both theme dictionaries. An interactive smoke check confirmed launch with a quoted file path, displayed metadata, the Copy Path shortcut and exact clipboard text, theme switching, and opening the native folder picker. The automation helper could not reliably target the native picker controls, so an end-to-end move through that picker is still a manual acceptance item. Core moves and view-model updates were exercised by automated tests. Cross-volume moves, ACL-denied filesystem operations, power loss/disk-full cases, Windows 10, high contrast, and varied monitor DPI were not tested.
+1. Select an image. FilePilot shows its name, extension, size, and the available output formats.
+2. Select the output format. For JPEG, set an opaque background as `#RRGGBB`; the default is white (`#FFFFFF`).
+3. Use **Destination** to choose an existing local folder. The source folder is the default.
+4. Select **Convert**. A busy indicator is shown; file-changing controls are disabled while it runs.
+5. On success, use **Open folder** to open the output directory in Explorer.
 
-## Current limitations
+The output uses the original stem with the new extension. Existing files or folders with that name are **refused**, including collisions appearing during conversion. There is no overwrite option in this phase; choose another destination. Originals remain unchanged and remain selected, so Copy Path continues to refer to the original after conversion. Successful Move File still changes the selected path to the moved file.
 
-Single file and one window at a time. No Explorer registration, conversion, rename, favorites, persisted settings, cursor positioning, automatic system-theme synchronization, installer, or background agent. Light theme is the default. No explicit overwrite option is offered. Startup time and memory have not been benchmarked. Cross-volume behavior depends on Windows and needs dedicated hardware/fault testing before release. No claim is made that Phase 1 is production-ready or that conversion/rename tests exist before those features are implemented.
+Conversion reads the actual image format and rejects extension/content mismatches, unsupported formats, incomplete decodes, and animated images. All eight EXIF orientations are applied before encoding. There is no resizing: width and height are retained except that 90°/270° orientation swaps the axes. PNG/WebP retain transparency; JPEG composites transparent and partially transparent pixels onto the selected background. JPEG quality is 92; WebP encoding quality is 100. Quality is currently fixed.
 
-References: [WPF native dialogs](https://learn.microsoft.com/en-us/dotnet/desktop/wpf/windows/how-to-open-common-system-dialog-box), [File.Move behavior](https://learn.microsoft.com/en-us/dotnet/api/system.io.file.move?view=net-10.0).
+Output is encoded from fresh pixels, so source EXIF (including GPS), XMP, IPTC, comments, and the original orientation tag are not copied. Pixels are decoded/rendered as 8-bit sRGB; this is not an archival high-bit-depth/HDR workflow. Encoders may write ordinary format/color information. Metadata removal does not remove information visible in image pixels or filenames.
 
+Completed bytes are written to a random `.filepilot-<id>.tmp` file in the chosen destination, flushed, and finalized with a same-directory no-overwrite move. Failures and cancellation remove the owned temporary file. If cleanup itself is denied, the error reports the temporary path. No existing destination is removed to make room.
+
+**Cancel** is cooperative. Native decode, drawing, and encoding cannot be interrupted mid-call; the token is checked between those operations and during output copying, and before finalization. The window stays open until active work finishes. Cancellation arriving after finalization does not undo a successful output. A crash, forced process termination, power loss, or disconnected drive can leave a temporary file; the app does not scan for or delete files from previous runs.
+
+## Resource limits and path safety
+
+- Default limits: 64 MiB encoded input, 16 million pixels, and 16,384 pixels on either edge. Header information is checked before allocating full pixel buffers. Animated images are rejected. The service accepts lower limits for testing; the UI does not expose them.
+- Codec work runs away from the UI thread. Native working memory can still reach hundreds of MiB near the limits; these are input/dimension guardrails, not a hard process memory quota or time limit. Separate app instances have separate limits.
+- Only existing regular local files/folders on fixed, removable, or RAM drives are accepted. UNC/mapped-network paths, device paths, alternate data streams, traversal segments, reserved names, and reparse-point paths are rejected. This intentionally excludes symlinks, junctions, and many cloud placeholders.
+- Output names are derived from the validated source leaf name, not user-entered relative paths. The source handle prevents ordinary concurrent writes/replacement while decoding.
+- Validation does not defend against malicious filesystem changes between path checks. Do not use this prototype as a security boundary in adversarial shared folders.
+- Locked files and permission failures produce inline errors. No elevation is requested to bypass them. Independent Windows cloud-sync/filter drivers may still act on local files; FilePilot itself makes no network requests.
+
+Move File retains Phase 1's `File.Move(..., overwrite: false)` behavior. Across volumes Windows copies before deleting the source. If the source may remain after completion, FilePilot reports a partial result and does not retry deletion. A failed cross-volume move can leave a partial destination; inspect both paths before retrying. Real multi-volume fault testing remains outstanding.
+
+## UI and keyboard
+
+Light and dark themes are available for the current session. Tab/Shift+Tab navigate controls; standard control keys and underlined access keys operate them. Ctrl+Shift+C copies the absolute path. Alt+V starts conversion, Alt+A cancels conversion, and Alt+O opens the output folder when available. Native folder pickers support cancellation without starting an operation. On small desktops, the file/action area scrolls while feedback remains visible.
+
+The theme, JPEG background, and destination choices are not persisted. System-theme synchronization, custom high-contrast handling, multi-monitor cursor positioning, and a full screen-reader audit are not implemented.
+
+## Architecture and dependencies
+
+```text
+src/FilePilot.Core/
+  FileActions, LocalPathPolicy, SelectedFile       Existing Phase 1 file services
+  Conversion/IFileConverter                     Request/result contract
+  Conversion/ImageFileConverter                 Header checks, decoding, orientation, encoding
+  Conversion/AtomicOutput                       Temporary output and no-overwrite finalization
+src/FilePilot.App/
+  MainViewModel + MainViewModel.Conversion        Selection, actions, busy/cancellation state
+  MainWindow, App, Themes                         WPF controls and native dialogs
+  ExplorerIntegration                           Explicit HKCU registration commands
+tests/FilePilot.Tests/                           Core, registry, view-model, and WPF loading tests
+notices/                                        Packaged third-party license notices
+```
+
+There is no MVVM framework or DI container. The converter is constructor-injectable for state/cancellation tests. Registry behavior is tested under isolated HKCU test roots, rather than installing a real Explorer menu in automated tests. Existing Phase 1 behavior is reused.
+
+The sole new direct runtime package is **SkiaSharp 4.153.1**, a maintained MIT-licensed .NET wrapper for native Skia. Its NuGet dependencies supply native assets; publishing with `-r win-x64` selects the Windows architecture. No WPF-specific Skia view package is needed. SkiaSharp was chosen because currently maintained ImageSharp packages require build-time license setup; no older unpatched package or license-enforcement bypass is used. Keep native codecs updated. NuGet restore needs network access unless packages are cached; normal application use is offline.
+
+A future local DOCX-to-PDF engine can be added separately from the view. Its format contract and engine deployment/cancellation requirements should be designed when that feature is undertaken; Phase 2's format selector is deliberately image-specific.
+
+## Verification and limitations
+
+Phase 1 was committed and pushed at `cab070dc111d215e4292eca3b5ac7e16a27942cb`. Phase 2 is recorded on `feature/phase-2-conversion`; its Release build and 84-test suite passed before committing.
+
+The current suite contains **84 automated tests**, including all original 28 Phase 1 tests. Coverage includes all six conversions, alpha preservation/blending, custom/default JPEG backgrounds, eight EXIF orientations and metadata checks, corrupted/truncated/mismatched inputs, animation rejection, resource limits, Unicode/spaced paths, source preservation, locks, unsafe destinations, existing/concurrent/late collisions, cleanup after simulated write failure and cancellation, UI busy-state recovery, actual WPF/theme loading, and isolated registry registration/ownership checks.
+
+Final verification on 2026-10-22 (Windows 11, .NET SDK 10.0.402): Release build passed with zero warnings/errors; all 84 tests passed without skips; Windows x64 publish succeeded. NuGet vulnerability auditing (including transitive dependencies) reported no known vulnerable packages in the three projects on this date. Desktop checks verified launch with a Unicode/spaced PNG path, PNG-to-JPEG and PNG-to-WebP through the UI, JPEG dimensions with the independent WPF decoder, unchanged original SHA-256, output-format selection and keyboard conversion, light/dark rendering, the final compact layout, and collision refusal with an unchanged output hash. The real registration command succeeded and all four quoted HKCU command values were inspected. Unregistration was run and all four temporary menu keys were confirmed removed. No context-menu registration is left installed.
+
+Explorer UI access timed out waiting for app approval, so an actual right-click launch was not verified. Full interaction with the destination folder picker and Open folder still requires manual acceptance testing. These are distinct from the passing registry, conversion-service, and view-model tests.
+
+Not yet verified: Windows 10, ARM64/x86 deployment, broad codec fuzzing, real disk-full/power-loss/unplugged-drive cases, hostile ACL/reparse races, native cancellation under every codec workload, cross-volume moving, all monitor/DPI combinations, or comprehensive assistive-technology behavior. No production-readiness or hard memory-budget claim is made.
+
+Still deferred: quick rename, favorite destinations, batch conversion, document conversion, installer/signing, Windows 11 primary-menu integration, and startup/memory benchmarks.
+
+## Manual acceptance checklist
+
+Use disposable images and folders.
+
+1. Register the published app; right-click a supported image and launch FilePilot from Show more options. Try a spaced Unicode path and multiple selection.
+2. Convert each format to both other formats. Check dimensions, oriented pictures, transparent edges, and a custom JPEG background.
+3. Verify original contents and timestamps. Retry into an occupied output path and ensure existing contents survive.
+4. Choose a different destination, cancel the picker, cancel a sufficiently large conversion, and check for leftover `.filepilot-*.tmp` files.
+5. Check corrupted/unsupported/oversized images and locked or unwritable destinations.
+6. Check light/dark themes, keyboard controls, Open folder, small windows, and Copy Path/Move File regressions.
+7. Unregister and verify the menu disappears without changing default file associations or other menu entries.
+
+References: [Windows static shell verbs](https://learn.microsoft.com/en-us/windows/win32/shell/fa-verbs), [single-selection registration](https://learn.microsoft.com/en-us/windows/win32/shell/how-to-employ-the-verb-selection-model), [SkiaSharp package](https://www.nuget.org/packages/SkiaSharp/4.153.1), [SKCodec API](https://learn.microsoft.com/en-us/dotnet/api/skiasharp.skcodec), [ImageSharp support/licensing changes](https://sixlabors.com/posts/security-support-and-license-enforcement/).

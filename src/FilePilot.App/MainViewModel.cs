@@ -6,7 +6,7 @@ using FilePilot.Core;
 
 namespace FilePilot.App;
 
-public sealed class MainViewModel : INotifyPropertyChanged
+public sealed partial class MainViewModel : INotifyPropertyChanged
 {
     private readonly FileActions actions = new();
     private readonly Action<string> copyPath;
@@ -14,9 +14,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private bool isBusy;
     private string status = "Launch FilePilot with one absolute file path, or choose a file.";
 
-    public MainViewModel(Action<string> copyPath)
+    public MainViewModel(Action<string> copyPath, FilePilot.Core.Conversion.IFileConverter? converter = null)
     {
         this.copyPath = copyPath;
+        this.converter = converter ?? new FilePilot.Core.Conversion.ImageFileConverter();
         CopyPathCommand = new RelayCommand(CopyPath, () => selectedFile is not null && !IsBusy);
     }
 
@@ -38,6 +39,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             OnPropertyChanged();
             OnPropertyChanged(nameof(CanChooseFile));
             RefreshFile();
+            RefreshConversionState();
         }
     }
 
@@ -60,6 +62,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             selectedFile = null;
             Status = FriendlyError(ex);
         }
+        ResetConversion();
         RefreshFile();
     }
 
@@ -85,6 +88,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             var result = await Task.Run(() => actions.Move(source.FullPath, destinationFolder));
             // Preserve known metadata without a second I/O call that could obscure success.
             selectedFile = source with { FullPath = result.DestinationPath };
+            ResetConversion();
             Status = result.SourceMayRemain
                 ? "Partial result: destination created, but the source may still remain. Check both locations. FilePilot will not delete it automatically."
                 : "Success: file moved. Copy Path now uses the new location.";
@@ -108,6 +112,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     internal static string FriendlyError(Exception ex) => ex switch
     {
         FileCollisionException => ex.Message,
+        FilePilot.Core.Conversion.ImageConversionException => ex.Message,
         UnauthorizedAccessException => "Access denied. Choose a file and folder you have permission to use.",
         FileNotFoundException or DirectoryNotFoundException => "The file or folder no longer exists. Choose it again.",
         COMException => "The clipboard is busy or unavailable. Try Copy Path again.",
