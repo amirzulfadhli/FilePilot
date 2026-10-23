@@ -2,7 +2,8 @@
 [CmdletBinding()]
 param(
     [ValidateRange(1, 10)][int]$Runs = 5,
-    [string]$TestResultsDirectory
+    [string]$TestResultsDirectory,
+    [switch]$IncludeMemoryDiagnostics
 )
 
 Set-StrictMode -Version Latest
@@ -22,22 +23,30 @@ for ($parent = [IO.Path]::GetDirectoryName($results); $parent; $parent = [IO.Pat
     }
 }
 [IO.Directory]::CreateDirectory($results) | Out-Null
+$checks = @(@{ Name = 'Wpf'; Filter = 'FullyQualifiedName=FilePilot.Tests.WindowTests.WindowAndBothThemeDictionariesLoadOnStaThread' })
+if ($IncludeMemoryDiagnostics) {
+    $checks += @{ Name = 'Memory'; Filter = 'FullyQualifiedName=FilePilot.Tests.DiagnosticTests.MemorySnapshotReportsCurrentProcessAndRequiredWindowsApisArePresent' }
+    $checks += @{ Name = 'MemoryChurn'; Filter = 'FullyQualifiedName=FilePilot.Tests.DiagnosticTests.MemorySnapshotsRemainConsistentDuringAllocation' }
+}
 Push-Location $repository
 try {
     for ($attempt = 1; $attempt -le $Runs; $attempt++) {
-        $reportName = "Wpf-$attempt.trx"
-        # Each invocation owns a new testhost: WPF permits one Application per process.
-        & dotnet test tests/FilePilot.Tests/FilePilot.Tests.csproj -c Release --no-build --no-restore `
-            --filter 'FullyQualifiedName=FilePilot.Tests.WindowTests.WindowAndBothThemeDictionariesLoadOnStaThread' `
-            --logger "trx;LogFileName=$reportName" --results-directory $results --verbosity minimal | Out-Host
-        if ($LASTEXITCODE -ne 0) { throw "WPF repetition $attempt failed. Inspect checkpoints in $results/$reportName." }
-        [xml]$report = [IO.File]::ReadAllText((Join-Path $results $reportName))
-        $counters = $report.TestRun.ResultSummary.Counters
-        if ([int]$counters.total -ne 1 -or [int]$counters.executed -ne 1 -or [int]$counters.passed -ne 1 -or
-            [int]$counters.failed -ne 0 -or [int]$counters.notExecuted -ne 0) {
-            throw "WPF repetition $attempt did not execute and pass exactly one test."
+        foreach ($check in $checks) {
+            $reportName = "$($check.Name)-$attempt.trx"
+            # Separate processes preserve WPF's singleton and prevent memory warm-up
+            # in the allocation test from hiding a failure in the cold sampler test.
+            & dotnet test tests/FilePilot.Tests/FilePilot.Tests.csproj -c Release --no-build --no-restore `
+                --filter $check.Filter `
+                --logger "trx;LogFileName=$reportName" --results-directory $results --verbosity minimal | Out-Host
+            if ($LASTEXITCODE -ne 0) { throw "$($check.Name) repetition $attempt failed. Inspect $results/$reportName." }
+            [xml]$report = [IO.File]::ReadAllText((Join-Path $results $reportName))
+            $counters = $report.TestRun.ResultSummary.Counters
+            if ([int]$counters.total -ne 1 -or [int]$counters.executed -ne 1 -or [int]$counters.passed -ne 1 -or
+                [int]$counters.failed -ne 0 -or [int]$counters.notExecuted -ne 0) {
+                throw "$($check.Name) repetition $attempt did not execute and pass exactly one test."
+            }
         }
     }
-    [pscustomobject]@{ Passed = $Runs; Failed = 0; Reports = $results }
+    [pscustomobject]@{ Passed = $Runs * $checks.Count; Failed = 0; Reports = $results }
 }
 finally { Pop-Location }

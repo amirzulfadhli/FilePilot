@@ -44,9 +44,9 @@ jobs:
         run: |
           & ./scripts/Test-InstallTools.ps1 -PackagePath artifacts/ci-package/FilePilot-win-x64.zip
           & ./scripts/Test-DeploymentTools.ps1 -PackagePath artifacts/ci-package/FilePilot-win-x64.zip
-      - name: Repeat WPF lifecycle in fresh test processes
+      - name: Repeat WPF lifecycle and memory diagnostics in fresh test processes
         shell: pwsh
-        run: ./scripts/Test-WpfReliability.ps1 -TestResultsDirectory artifacts/wpf-results
+        run: ./scripts/Test-WpfReliability.ps1 -TestResultsDirectory artifacts/wpf-results -IncludeMemoryDiagnostics
       - name: Retain test reports and candidate package (not a release)
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -86,9 +86,9 @@ jobs:
           New-Item -ItemType Directory -Force $env:FILEPILOT_DOCUMENT_TEST_OUTPUT | Out-Null
           dotnet test FilePilot.slnx -c Release --logger 'trx;LogFileName=Documents.trx' --results-directory artifacts/document-results --verbosity minimal
           if ($LASTEXITCODE -ne 0) { throw 'Real-engine acceptance failed.' }
-      - name: Repeat WPF lifecycle after real-engine acceptance
+      - name: Repeat WPF lifecycle and memory diagnostics after real-engine acceptance
         shell: pwsh
-        run: ./scripts/Test-WpfReliability.ps1 -TestResultsDirectory artifacts/wpf-results
+        run: ./scripts/Test-WpfReliability.ps1 -TestResultsDirectory artifacts/wpf-results -IncludeMemoryDiagnostics
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'

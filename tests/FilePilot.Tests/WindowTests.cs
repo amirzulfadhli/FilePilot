@@ -26,7 +26,9 @@ public sealed class WindowTests(ITestOutputHelper output)
             FilePilot.App.App? application = null;
             try
             {
-                trace.Record($"STA entry: apartment={Thread.CurrentThread.GetApartmentState()}, dispatcherExists={Dispatcher.FromThread(Thread.CurrentThread) is not null}, context={SynchronizationContext.Current?.GetType().Name ?? "none"}");
+                trace.Record("STA delegate entered");
+                trace.Run("inspect STA context", () => trace.Record($"apartment={Thread.CurrentThread.GetApartmentState()}, dispatcherExists={Dispatcher.FromThread(Thread.CurrentThread) is not null}, context={SynchronizationContext.Current?.GetType().Name ?? "none"}"));
+                trace.Run("initialize STA Dispatcher", () => { _ = Dispatcher.CurrentDispatcher; });
                 bool started = false;
                 trace.Run("Application constructor", () => application = new FilePilot.App.App(_ =>
                 { started = true; trace.Record("event: isolated Application.OnStartup"); }));
@@ -71,7 +73,7 @@ public sealed class WindowTests(ITestOutputHelper output)
         thread.SetApartmentState(ApartmentState.STA);
         thread.IsBackground = true;
         thread.Name = "FilePilot WPF acceptance";
-        thread.Start();
+        trace.Run("STA Thread.Start", thread.Start);
         var exited = thread.Join(TimeSpan.FromSeconds(20));
         trace.Record($"join: exited={exited}, threadState={thread.ThreadState}");
         output.WriteLine(trace.ToString());

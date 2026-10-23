@@ -3,13 +3,15 @@ using System.Text.Json;
 using FilePilot.App.Diagnostics;
 using FilePilot.Core;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace FilePilot.Tests;
 
 public sealed class DiagnosticTests : IDisposable
 {
+    private readonly ITestOutputHelper output;
     private readonly string root = Path.Combine(Path.GetTempPath(), "FilePilot-diagnostic-tests-" + Guid.NewGuid().ToString("N"));
-    public DiagnosticTests() => Directory.CreateDirectory(root);
+    public DiagnosticTests(ITestOutputHelper output) { this.output = output; Directory.CreateDirectory(root); }
     [Theory]
     [InlineData("popup", false)]
     [InlineData("widget", true)]
@@ -55,11 +57,45 @@ public sealed class DiagnosticTests : IDisposable
     public void MemorySnapshotReportsCurrentProcessAndRequiredWindowsApisArePresent()
     {
         var snapshot = MemorySnapshot.Capture();
-        Assert.True(snapshot.PrivateBytes > 0);
-        Assert.True(snapshot.WorkingSetBytes > 0);
-        Assert.True(snapshot.ManagedBytes > 0);
-        Assert.True(snapshot.PeakWorkingSetBytes >= snapshot.WorkingSetBytes);
+        output.WriteLine(snapshot.ToString());
+        output.WriteLine($"GC server={System.Runtime.GCSettings.IsServerGC}, collections={GC.CollectionCount(0)}/{GC.CollectionCount(1)}/{GC.CollectionCount(2)}, heapAtLastGC={GC.GetGCMemoryInfo().HeapSizeBytes}, currentEstimate={GC.GetTotalMemory(false)}");
+        Assert.True(snapshot.PrivateBytes > 0, "Private memory: " + snapshot);
+        Assert.True(snapshot.WorkingSetBytes > 0, "Working set: " + snapshot);
+        Assert.True(snapshot.ManagedBytes > 0, "Managed estimate: " + snapshot);
+        Assert.True(snapshot.PeakWorkingSetBytes >= snapshot.WorkingSetBytes, "Peak working set: " + snapshot);
         Assert.True(DiagnosticRunner.CheckNativeApis());
+    }
+    [Fact]
+    public async Task MemorySnapshotsRemainConsistentDuringAllocation()
+    {
+        using var stop = new CancellationTokenSource();
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allocating = Task.Run(() =>
+        {
+            // Retain an 8 MiB ring, touching pages; cap total allocation at 256 MiB.
+            var blocks = new byte[8][];
+            for (int allocation = 0; allocation < 256 && !stop.IsCancellationRequested; allocation++)
+            {
+                var block = new byte[1024 * 1024];
+                for (int page = 0; page < block.Length; page += 4096) block[page] = 1;
+                blocks[allocation % blocks.Length] = block;
+                if (allocation == blocks.Length - 1) ready.TrySetResult();
+            }
+            GC.KeepAlive(blocks);
+        });
+        try
+        {
+            await ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            for (int sample = 0; sample < 200; sample++)
+            {
+                var snapshot = MemorySnapshot.Capture();
+                Assert.True(snapshot.PrivateBytes > 0, $"Sample {sample}: {snapshot}");
+                Assert.True(snapshot.WorkingSetBytes > 0, $"Sample {sample}: {snapshot}");
+                Assert.True(snapshot.ManagedBytes > 0, $"Sample {sample}: {snapshot}");
+                Assert.True(snapshot.PeakWorkingSetBytes >= snapshot.WorkingSetBytes, $"Sample {sample}: {snapshot}");
+            }
+        }
+        finally { stop.Cancel(); await allocating; }
     }
     [Fact]
     public void OneShotFallbackCannotKeepResidentMarkerAlive()
