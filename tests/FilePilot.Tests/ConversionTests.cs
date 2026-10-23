@@ -20,6 +20,12 @@ public sealed class ConversionTests : IDisposable
         Directory.CreateDirectory(output);
     }
 
+    private static SKCodec ReadCodec(string path)
+    {
+        using var bytes = SKData.CreateCopy(File.ReadAllBytes(path));
+        return SKCodec.Create(bytes);
+    }
+
     private string CreateImage(ImageFileFormat format, bool transparent = false, string? name = null)
     {
         var extension = format switch { ImageFileFormat.Png => ".png", ImageFileFormat.Jpg => ".jpg", _ => ".webp" };
@@ -63,11 +69,14 @@ public sealed class ConversionTests : IDisposable
         var original = File.ReadAllBytes(source);
         var timestamp = File.GetLastWriteTimeUtc(source);
         var result = await converter.ConvertAsync(new(source, output, to));
-        using var decoded = SKBitmap.Decode(result.OutputPath);
+        // Verify service handles are closed before any test-side decoding starts.
+        using (File.Open(source, FileMode.Open, FileAccess.ReadWrite, FileShare.None)) { }
+        using (File.Open(result.OutputPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None)) { }
+        using var decoded = SKBitmap.Decode(File.ReadAllBytes(result.OutputPath));
         Assert.NotNull(decoded);
         Assert.Equal(64, decoded.Width);
         Assert.Equal(32, decoded.Height);
-        using var codec = SKCodec.Create(result.OutputPath);
+        using var codec = ReadCodec(result.OutputPath);
         Assert.Equal(to switch { ImageFileFormat.Png => SKEncodedImageFormat.Png, ImageFileFormat.Jpg => SKEncodedImageFormat.Jpeg, _ => SKEncodedImageFormat.Webp }, codec.EncodedFormat);
         Assert.Equal(original, File.ReadAllBytes(source));
         Assert.Equal(timestamp, File.GetLastWriteTimeUtc(source));
@@ -82,7 +91,7 @@ public sealed class ConversionTests : IDisposable
     {
         var source = CreateImage(from, true);
         var result = await converter.ConvertAsync(new(source, output, to));
-        using var image = SKBitmap.Decode(result.OutputPath);
+        using var image = SKBitmap.Decode(File.ReadAllBytes(result.OutputPath));
         Assert.Equal(0, image.GetPixel(20, 10).Alpha);
     }
 
@@ -94,7 +103,7 @@ public sealed class ConversionTests : IDisposable
     public async Task JpegFlattensOnConfiguredBackground(ImageFileFormat from, string background, int r, int g, int b)
     {
         var result = await converter.ConvertAsync(new(CreateImage(from, true), output, ImageFileFormat.Jpg, background));
-        using var image = SKBitmap.Decode(result.OutputPath);
+        using var image = SKBitmap.Decode(File.ReadAllBytes(result.OutputPath));
         var pixel = image.GetPixel(20, 10);
         Assert.Equal(255, pixel.Alpha);
         Assert.InRange(Math.Abs(pixel.Red - r), 0, 3);
@@ -115,7 +124,7 @@ public sealed class ConversionTests : IDisposable
             encoded.SaveTo(file);
         }
         var result = await converter.ConvertAsync(new(source, output, ImageFileFormat.Jpg));
-        using var actual = SKBitmap.Decode(result.OutputPath);
+        using var actual = SKBitmap.Decode(File.ReadAllBytes(result.OutputPath));
         var pixel = actual.GetPixel(4, 4);
         Assert.InRange(pixel.Red, 252, 255);
         Assert.InRange(pixel.Green, 124, 130);
@@ -135,10 +144,10 @@ public sealed class ConversionTests : IDisposable
     {
         var source = CreateImage(ImageFileFormat.Jpg);
         AddExif(source, (ushort)orientation);
-        using (var inputCodec = SKCodec.Create(source)) Assert.Equal(orientation, (int)inputCodec.EncodedOrigin);
+        using (var inputCodec = ReadCodec(source)) Assert.Equal(orientation, (int)inputCodec.EncodedOrigin);
         var original = File.ReadAllBytes(source);
         var result = await converter.ConvertAsync(new(source, output, ImageFileFormat.Png));
-        using var image = SKBitmap.Decode(result.OutputPath);
+        using var image = SKBitmap.Decode(File.ReadAllBytes(result.OutputPath));
         Assert.Equal(orientation >= 5 ? 32 : 64, image.Width);
         Assert.Equal(orientation >= 5 ? 64 : 32, image.Height);
         var points = new[] { (1, 1), (3, 1), (1, 3), (3, 3) };
@@ -152,7 +161,7 @@ public sealed class ConversionTests : IDisposable
             Assert.InRange(Math.Abs(actual.Blue - expected.Blue), 0, 8);
         }
         Assert.DoesNotContain("private_location", Encoding.Latin1.GetString(File.ReadAllBytes(result.OutputPath)));
-        using var outputCodec = SKCodec.Create(result.OutputPath);
+        using var outputCodec = ReadCodec(result.OutputPath);
         Assert.Equal(SKEncodedOrigin.TopLeft, outputCodec.EncodedOrigin);
         Assert.Equal(original, File.ReadAllBytes(source));
     }
@@ -164,7 +173,7 @@ public sealed class ConversionTests : IDisposable
         AddExif(source, 6);
         var result = await converter.ConvertAsync(new(source, output, ImageFileFormat.WebP));
         Assert.DoesNotContain("private_location", Encoding.Latin1.GetString(File.ReadAllBytes(result.OutputPath)));
-        using var codec = SKCodec.Create(result.OutputPath);
+        using var codec = ReadCodec(result.OutputPath);
         Assert.Equal(SKEncodedOrigin.TopLeft, codec.EncodedOrigin);
         Assert.Equal(32, codec.Info.Width);
     }
@@ -329,7 +338,7 @@ public sealed class ConversionTests : IDisposable
             file.Write(BitConverter.GetBytes((int)body.Length));
             file.Write(body.ToArray());
         }
-        using (var codec = SKCodec.Create(source)) Assert.Equal(2, codec.FrameCount);
+        using (var codec = ReadCodec(source)) Assert.Equal(2, codec.FrameCount);
         var error = await Assert.ThrowsAsync<ImageConversionException>(() => converter.ConvertAsync(new(source, output, ImageFileFormat.Png)));
         Assert.Contains("Animated", error.Message);
         Assert.Empty(Directory.GetFiles(output));
@@ -344,7 +353,7 @@ public sealed class ConversionTests : IDisposable
         Assert.Single(outcomes, error => error is null);
         Assert.Single(outcomes, error => error is FileCollisionException);
         Assert.Single(Directory.GetFiles(output));
-        using var decoded = SKBitmap.Decode(Directory.GetFiles(output)[0]);
+        using var decoded = SKBitmap.Decode(File.ReadAllBytes(Directory.GetFiles(output)[0]));
         Assert.Equal(64, decoded.Width);
         Assert.True(File.Exists(source));
     }

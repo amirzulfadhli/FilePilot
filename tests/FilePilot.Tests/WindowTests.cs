@@ -44,6 +44,9 @@ public sealed class WindowTests
                 window.ShowPopup();
                 Assert.True(window.IsVisible);
                 Assert.Equal(640, window.Height);
+                window.WindowState = WindowState.Minimized;
+                window.ShowPopup();
+                Assert.Equal(WindowState.Normal, window.WindowState);
                 ((MainViewModel)window.DataContext).ClearSelection("Choose files");
                 window.ShowPopup();
                 Assert.Equal(420, window.Height);

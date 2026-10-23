@@ -8,7 +8,7 @@ namespace FilePilot.App;
 public static class ExplorerIntegration
 {
     private const string Owner = "FilePilot.Phase2.4cf15962";
-    internal static readonly string[] Extensions = [".png", ".jpg", ".jpeg", ".webp"];
+    internal static readonly string[] Extensions = [".png", ".jpg", ".jpeg", ".webp", ".docx"];
     private static string VerbPath(string extension) => $@"SystemFileAssociations\{extension}\shell\FilePilot";
 
     public static void Register(string executablePath)
@@ -21,7 +21,7 @@ public static class ExplorerIntegration
     public static void Unregister()
     {
         using var classes = Registry.CurrentUser.OpenSubKey(@"Software\Classes", true);
-        if (classes is not null) Unregister(classes);
+        if (classes is not null) Unregister(classes, Environment.ProcessPath ?? throw new InvalidOperationException("Cannot locate FilePilot.exe."));
         NotifyShell();
     }
 
@@ -52,11 +52,18 @@ public static class ExplorerIntegration
         }
     }
 
-    internal static void Unregister(RegistryKey classes)
+    internal static void Unregister(RegistryKey classes, string? expectedExecutable = null)
     {
         CheckOwnership(classes);
         foreach (var extension in Extensions)
+        {
+            if (expectedExecutable is not null)
+            {
+                using var command = classes.OpenSubKey(VerbPath(extension) + @"\command");
+                if (!string.Equals(command?.GetValue("") as string, BuildCommand(expectedExecutable), StringComparison.OrdinalIgnoreCase)) continue;
+            }
             classes.DeleteSubKeyTree(VerbPath(extension), throwOnMissingSubKey: false);
+        }
     }
 
     private static void CheckOwnership(RegistryKey classes)

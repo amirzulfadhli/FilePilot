@@ -23,7 +23,7 @@ dotnet publish src/FilePilot.App -c Release -r win-x64 --self-contained false -o
 & .\artifacts\publish\FilePilot.exe "C:\Files\photo.png"
 ```
 
-Distribute the **whole folder**, including SkiaSharp's native library and the `notices` directory. This build requires the .NET 10 Desktop Runtime. Use `--self-contained true` for a larger distribution that bundles the runtime. There is no signed setup executable yet. Phase 6 adds a source-checkout per-user deployment script; see [Phase 6 installation and validation](docs/phase-6-usability.md). Do not register an executable in a temporary location that will later be deleted.
+Distribute the **whole folder**, including SkiaSharp's native library and the `notices` directory. This build requires the .NET 10 Desktop Runtime. Use `--self-contained true` for a larger distribution that bundles the runtime. There is no signed setup executable yet. Phase 6 adds packaged per-user deployment and version-management scripts; see [Phase 6 installation and validation](docs/phase-6-usability.md). Do not register an executable in a temporary location that will later be deleted.
 
 ## Portable packages
 
@@ -44,7 +44,7 @@ The finalized ZIP contains the runtime files, README, supporting setup/validatio
 
 The validator checks file hashes/lengths, required runtime files and notices, duplicate/unlisted files, Windows-unsafe paths/reserved names, links, and accidental development/secret filenames. It rejects archives over 512 MiB, declared expanded totals over 1 GiB, more than 1,024 entries, and manifests over 2 MiB. It reads without extracting or executing the package. Hashes detect corruption; they do not authenticate a publisher or replace code signing. Validation checks package structure/integrity, not runtime compatibility or every malicious archive scenario.
 
-Extract the ZIP to a normal local folder, keep all its contents together, and run `FilePilot.exe`. The .NET 10 Desktop Runtime is still required. Packages are currently Windows x64 only and unsigned; no installer or automatic context-menu/startup registration is included. The builder's raw `publish/` folder is diagnostic output; distribute the validated ZIP.
+Extract the ZIP to a normal local folder, keep all its contents together, and run `FilePilot.exe`. The .NET 10 Desktop Runtime is still required. Packages are currently Windows x64 only and unsigned; deployment scripts are included under deployment/. Activation can create a Start Menu shortcut and opt into the classic context menu; no automatic startup is installed. The builder's raw `publish/` folder is diagnostic output; distribute the validated ZIP.
 
 Verification on 2026-10-23: Release build passed with zero warnings/errors; all 118 application tests and 21 packaging checks passed. An actual Windows x64 ZIP was created and validated (about 5.6 MiB compressed / 13.3 MiB expanded for the tested build, with 10 payload files plus the manifest). Tests include damaged bytes, length mismatch, missing native codecs/notices/manifest, invalid metadata/JSON, duplicate/unlisted paths, traversal/absolute/reserved names, debug/secrets exclusion, and existing/outside output protection. Testing was local; no package has been published as a GitHub release.
 
@@ -101,14 +101,14 @@ Registration is explicit and per user. Run the published executable from its fin
 & .\artifacts\publish\FilePilot.exe --unregister-context-menu
 ```
 
-Each command shows a success or failure dialog and exits (0 for success, 1 for failure). To wait for its result in a script:
+Each command shows a success or failure dialog and exits (0 for success, 1 for failure). Add `--quiet` to suppress dialogs in deployment scripts. Unregistration removes only entries pointing to that executable, preserving a newer version. To wait for its result in a script:
 
 ```powershell
 $process = Start-Process .\artifacts\publish\FilePilot.exe -ArgumentList '--register-context-menu' -Wait -PassThru
 $process.ExitCode
 ```
 
-Right-click a `.png`, `.jpg`, `.jpeg`, or `.webp` file and choose **FilePilot**. On Windows 11, use **Show more options**. This is a classic static shell verb; no COM extension or primary-menu integration is installed.
+Right-click a `.png`, `.jpg`, `.jpeg`, `.webp`, or `.docx` file and choose **FilePilot**. On Windows 11, use **Show more options**. This is a classic static shell verb; no COM extension or primary-menu integration is installed.
 
 Only these per-user locations are written:
 
@@ -193,7 +193,7 @@ Document conversion now has a separate `IDocumentConverter` / `IDocumentPdfEngin
 
 Phase 1 was committed and pushed at `cab070dc111d215e4292eca3b5ac7e16a27942cb`. Phase 2 is committed as `926f35896292812e674c3cebbf59b6da93b50a4b` on `feature/phase-2-conversion`. Phase 2 and Phase 3 have been pushed to GitHub. Phase 3 is committed as `4661051325465ff212e26a2b42cd8de8bcc52515` on `feature/phase-3-widget`. Phase 4 packaging work is on `feature/phase-4-distribution`.
 
-The current suite contains **156 automated tests**, including all original 28 Phase 1 tests. Coverage includes all six conversions, alpha preservation/blending, custom/default JPEG backgrounds, eight EXIF orientations and metadata checks, corrupted/truncated/mismatched inputs, animation rejection, resource limits, Unicode/spaced paths, source preservation, locks, unsafe destinations, existing/concurrent/late collisions, cleanup after simulated write failure and cancellation, UI busy-state recovery, actual WPF/theme loading, and isolated registry registration/ownership checks.
+The current suite contains **162 automated tests**, including all original 28 Phase 1 tests. Coverage includes all six conversions, alpha preservation/blending, custom/default JPEG backgrounds, eight EXIF orientations and metadata checks, corrupted/truncated/mismatched inputs, animation rejection, resource limits, Unicode/spaced paths, source preservation, locks, unsafe destinations, existing/concurrent/late collisions, cleanup after simulated write failure and cancellation, UI busy-state recovery, actual WPF/theme loading, and isolated registry registration/ownership checks.
 
 Phase 2 verification on 2026-10-22 (Windows 11, .NET SDK 10.0.402): Release build passed with zero warnings/errors; all 84 tests passed without skips; Windows x64 publish succeeded. NuGet vulnerability auditing (including transitive dependencies) reported no known vulnerable packages in the three projects on this date. Desktop checks verified launch with a Unicode/spaced PNG path, PNG-to-JPEG and PNG-to-WebP through the UI, JPEG dimensions with the independent WPF decoder, unchanged original SHA-256, output-format selection and keyboard conversion, light/dark rendering, the final compact layout, and collision refusal with an unchanged output hash. The real registration command succeeded and all four quoted HKCU command values were inspected. Unregistration was run and all four temporary menu keys were confirmed removed. No context-menu registration is left installed.
 
@@ -212,7 +212,7 @@ Unverified Phase 3 desktop flows: full favorite-folder picker/add/remove/move in
 3. Phase 3 — floating widget, shortcut, batch conversion, rename, and favorite folders (implemented).
 4. Phase 4 — portable packaging, startup/memory tooling, extracted-package runtime checks and resident lifecycle fix completed for the available Windows 11 host; Windows 10 is explicitly unverified.
 5. Phase 5 — optional single-DOCX → PDF conversion verified with real LibreOffice 26.8.1.1 on Windows 11, source-property minimization, short local engine workspaces, cancellation/timeout/error handling and initial widget usability checks. See docs/phase-5-documents.md for evidence and limits.
-6. Phase 6 (in progress) — fixed Settings actions/keyboard dismissal, document action access keys, lower preflight allocations, safe per-user installation preview and installed-app performance checks. See [Phase 6 details](docs/phase-6-usability.md). Installer signing and optional Windows 11 primary-menu integration remain later work.
+6. Phase 6 — packaged per-user installation, guarded upgrade/rollback/uninstall, Unicode Start Menu shortcuts, version-scoped Explorer integration and widget usability/stability checks. See [Phase 6 details](docs/phase-6-usability.md). Installer signing and optional Windows 11 primary-menu integration remain later work.
 
 Windows 10 and broad hardware/accessibility acceptance remain unverified release limitations, not inferred from Windows 11 test results.
 

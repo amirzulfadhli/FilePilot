@@ -10,7 +10,7 @@ internal sealed class SettingsWindow : Window
     internal SettingsWindow(WidgetSettings settings, Action<WidgetSettings> save)
     {
         Title = "FilePilot settings";
-        Width = 460; Height = 520; MinWidth = 400; MinHeight = 400;
+        Width = 460; Height = 520; MinWidth = 320; MinHeight = 280; FontSize = 14;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         SetResourceReference(BackgroundProperty, "WindowBrush");
         SetResourceReference(ForegroundProperty, "TextBrush");
@@ -25,7 +25,8 @@ internal sealed class SettingsWindow : Window
         var shortcut = new TextBox { Text = settings.Shortcut };
         System.Windows.Automation.AutomationProperties.SetName(shortcut, "Global keyboard shortcut");
         panel.Children.Add(shortcut);
-        panel.Children.Add(new TextBlock { Text = "Example: Ctrl+Alt+F. Requires Ctrl or Alt.\nThe app must be running for the shortcut to work.", Margin = new Thickness(0, 6, 0, 12) });
+        panel.Children.Add(new TextBlock { Text = "Example: Ctrl+Alt+F. Requires Ctrl or Alt.\nThe app must be running for the shortcut to work.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 12) });
+        Loaded += (_, _) => { Widget.PopupPlacement.Place(this); shortcut.Focus(); shortcut.SelectAll(); };
         panel.Children.Add(new TextBlock { Text = "Favorite folders (up to 20)", Margin = new Thickness(0, 0, 0, 6) });
         var favorites = new System.Collections.ObjectModel.ObservableCollection<string>(settings.FavoriteFolders ?? []);
         var list = new ListBox { ItemsSource = favorites, Height = 130 };

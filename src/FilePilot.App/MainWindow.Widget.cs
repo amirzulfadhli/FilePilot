@@ -38,6 +38,7 @@ public partial class MainWindow
     internal void ShowPopup(NativeMethods.Point? cursor = null)
     {
         if (exiting) return;
+        if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
         PopupPlacement.Place(this, cursor);
         Show();
         Activate();

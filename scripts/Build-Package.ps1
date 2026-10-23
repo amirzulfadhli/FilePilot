@@ -34,6 +34,10 @@ try {
     & dotnet publish src/FilePilot.App -c Release -r win-x64 --self-contained false -p:DebugType=None -p:DebugSymbols=false -o $publish --verbosity minimal | Out-Host
     if ($LASTEXITCODE -ne 0) { throw 'Windows publish failed. No package was finalized.' }
     Copy-Item -LiteralPath (Join-Path $repository 'README.md') -Destination (Join-Path $publish 'README.md')
+    $deployment = [IO.Directory]::CreateDirectory((Join-Path $publish 'deployment')).FullName
+    foreach ($tool in @('Install-FilePilot.ps1', 'Manage-FilePilot.ps1', 'Deployment.Common.ps1', 'Test-Package.ps1')) {
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot $tool) -Destination (Join-Path $deployment $tool)
+    }
     $revision = (& git rev-parse HEAD).Trim()
     if ($LASTEXITCODE -ne 0) { throw 'Cannot record the source revision.' }
     $status = @(& git status --porcelain)

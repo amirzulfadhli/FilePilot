@@ -10,21 +10,22 @@ public partial class App : Application
     {
         base.OnStartup(e);
         if (e.Args.Length > 0 && e.Args[0] == "--diagnostics") { RunDiagnostics(e.Args); return; }
-        if (e.Args.Length == 1 && e.Args[0] is "--register-context-menu" or "--unregister-context-menu")
+        if (e.Args.Length is 1 or 2 && e.Args[0] is "--register-context-menu" or "--unregister-context-menu" && (e.Args.Length == 1 || e.Args[1] == "--quiet"))
         {
             try
             {
                 var register = e.Args[0] == "--register-context-menu";
                 if (register) ExplorerIntegration.Register(Environment.ProcessPath ?? throw new InvalidOperationException("Cannot locate FilePilot.exe."));
                 else ExplorerIntegration.Unregister();
-                MessageBox.Show(register
-                    ? "FilePilot was added for PNG, JPG, JPEG, and WebP files for your Windows account. On Windows 11, use Show more options."
-                    : "FilePilot's context-menu entries were removed for your Windows account.", "FilePilot", MessageBoxButton.OK, MessageBoxImage.Information);
+                if (e.Args.Length == 1) MessageBox.Show(register
+                    ? "FilePilot was added for PNG, JPG, JPEG, WebP and DOCX files for your Windows account. On Windows 11, use Show more options."
+                    : "Context-menu entries pointing to this FilePilot executable were removed for your Windows account. Newer installations are preserved.", "FilePilot", MessageBoxButton.OK, MessageBoxImage.Information);
                 Shutdown(0);
             }
             catch (Exception ex) when (MainViewModel.IsExpected(ex) || ex is InvalidOperationException)
             {
-                MessageBox.Show($"Explorer integration could not finish. {ex.Message}", "FilePilot", MessageBoxButton.OK, MessageBoxImage.Error);
+                if (e.Args.Length == 1) MessageBox.Show($"Explorer integration could not finish. {ex.Message}", "FilePilot", MessageBoxButton.OK, MessageBoxImage.Error);
+                else Console.Error.WriteLine($"Explorer integration could not finish. {ex.Message}");
                 Shutdown(1);
             }
             return;

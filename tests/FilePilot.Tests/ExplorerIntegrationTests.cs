@@ -48,6 +48,26 @@ public sealed class ExplorerIntegrationTests
     }
 
     [Fact]
+    public void OlderVersionCannotUnregisterNewerVersionsMenu()
+    {
+        WithIsolatedRoot((root, executable) =>
+        {
+            var newer = Path.Combine(Path.GetDirectoryName(executable)!, "New FilePilot.exe");
+            File.WriteAllText(newer, "Never executed");
+            ExplorerIntegration.Register(root, executable);
+            ExplorerIntegration.Register(root, newer);
+            ExplorerIntegration.Unregister(root, executable);
+            foreach (var extension in ExplorerIntegration.Extensions)
+            {
+                using var command = root.OpenSubKey($@"SystemFileAssociations\{extension}\shell\FilePilot\command");
+                Assert.Equal(ExplorerIntegration.BuildCommand(newer), command?.GetValue(""));
+            }
+            ExplorerIntegration.Unregister(root, newer);
+            Assert.Null(root.OpenSubKey(@"SystemFileAssociations\.docx\shell\FilePilot"));
+        });
+    }
+
+    [Fact]
     public void RefusesToChangeAnUnownedEntry()
     {
         WithIsolatedRoot((root, executable) =>

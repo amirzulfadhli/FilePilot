@@ -1,6 +1,6 @@
 # Phase 6 — initial usability and installation slice
 
-Status: incremental implementation on feature/phase-6-usability-installation, based on the verified and pushed Phase 5 commit 51741ee. This starts Phase 6; it is not a finished signed Windows installer or a completed accessibility/hardware certification.
+Status: Phase 6 MVP implementation on feature/phase-6-usability-installation. Managed installation, side-by-side upgrades/rollback, guarded uninstall and available Windows 11 usability/performance checks are implemented. Signing, graphical setup, Windows 10 and broad accessibility/hardware certification remain release limitations.
 
 ## Widget and allocation changes
 
@@ -45,3 +45,40 @@ Reproduce installation checks with Test-InstallTools.ps1 -PackagePath <zip>; it 
 Remaining: Windows 10 runtime acceptance (explicitly unverified), broad monitor/DPI/hardware/keyboard/screen-reader/high-contrast checks, signed installer UX and upgrades/uninstall, long-running memory/engine resource characterization, and representative complex DOCX fidelity. Full manual coverage is not inferred from WPF loading tests.
 
 New Phase 6 interactive Settings acceptance remains unverified: desktop automation could read the popup controls but could not activate/capture the new test window reliably (the capture showed the desktop). The completed Phase 5 interactive checks remain valid; fixed-footer layout and default/cancel button configuration in Phase 6 are covered by the WPF test. The idle test process was stopped and no saved preferences were changed during this attempt.
+
+## Managed deployment completion (23 October 2026)
+
+New ZIPs include their deployment tools under deployment/, so setup no longer requires a source checkout. Use PowerShell 7.2+ and a .NET 10 x64 Windows Desktop Runtime; no elevation is requested. The scripts do not download prerequisites, start FilePilot automatically or add autostart/services. They are a lightweight CLI installer, not an MSI/MSIX or graphical setup program. No Apps & Features registration or code signing is claimed.
+
+```powershell
+# From a trusted, unpacked new package; paths here are examples.
+$versionA = & .\deployment\Install-FilePilot.ps1 -PackagePath 'C:\Downloads\FilePilot-win-x64.zip'
+$manager = Join-Path $versionA.Directory 'deployment/Manage-FilePilot.ps1'
+& $manager -Action Activate -InstallDirectory $versionA.Directory
+# Add -RegisterContextMenu to opt into the classic per-user Explorer menu.
+
+# Upgrade: install the next package in a new directory, then activate it.
+# Exit the resident widget using its notification icon before switching versions.
+$versionB = & .\deployment\Install-FilePilot.ps1 -PackagePath 'C:\Downloads\next-FilePilot-win-x64.zip'
+$managerB = Join-Path $versionB.Directory 'deployment/Manage-FilePilot.ps1'
+& $managerB -Action Activate -InstallDirectory $versionB.Directory
+& $managerB -Action Rollback  # switches back to retained A; B stays on disk
+
+# Inspect removal first, then remove one selected installation.
+& $managerB -Action Uninstall -InstallDirectory $versionA.Directory -WhatIf
+& $managerB -Action Uninstall -InstallDirectory $versionA.Directory
+```
+
+Activation writes a per-user FilePilot.lnk in the Start Menu and owned state under LOCALAPPDATA/FilePilot/Deployment. It never edits an unrelated or retargeted shortcut. Native IShellLinkW/IPersistFile APIs preserve Unicode shortcut paths; real testing found WScript.Shell corrupted those paths on this host. Upgrades retain the previous directory and settings; rollback changes the shortcut and any managed Explorer registration, never restores/deletes user files. Use the same StateDirectory/ShortcutPath overrides for all operations if testing/customizing those paths; keep them outside version directories. No version is forcibly stopped. A failed state commit restores the previous shortcut; version files stay available. A process crash or exceptional registry/rollback failure may require inspecting state/shortcut/menu before retrying; this is not an OS transaction.
+
+Uninstall validates the receipt, manifest, every present payload hash and the complete directory inventory. It refuses unexpected files/folders, modified payloads, read-only/locked files, reparse/offline paths and running FilePilot instances. It preflights writable handles and rechecks bytes through those handles, unregisters only Explorer entries pointing to that executable, and deletes only its enumerated payload files and empty directories. No recursive removal is used. Preferences, sources, outputs and other installations remain untouched. If deletion is interrupted, an owned Removing receipt permits retrying missing payloads while still refusing modified or unexpected files. Retry using management tools from another retained/unpacked package if the interrupted version's tools were already removed. Exceptional failures removing the final control files may need manual cleanup of the reported directory. Legacy preview packages without deployment tools are not accepted for managed activation/removal; retain them and migrate to a new package first.
+
+Explorer integration now includes DOCX alongside the four image extensions. Quiet registration commands return an exit status for deployment scripts, never restart Explorer and write only HKCU. Removing an old managed version cannot unregister a menu pointing to a newer executable. Registration remains opt-in; Windows 11 uses Show more options and single-file context-menu selection. Native primary-menu and multi-file shell extensions remain deferred.
+
+Widget stability changes: reopening a minimized widget restores its normal window; Settings positions within the monitor work area, supports a smaller viewport with scrolling and wraps shortcut guidance. The modal dialog's shortcut field starts focused. An interactive Windows 11 check confirmed the fixed Save/Cancel footer, focus, Escape cancellation, popup recovery and light/dark rendering. No preferences were saved by this check. Windows 10 and broad multi-monitor/high-contrast/screen-reader tests remain explicitly unverified.
+
+A packaging attempt stopped on an intermittent image-test fixture deletion lock after successful pixel assertions. Test-side image/codec inspection now uses byte buffers, and existing conversion checks explicitly verify exclusive access to both source and completed output before decoding. The affected 45-case suite passed three additional consecutive runs after the change. No product lock/overwrite protections were weakened. Final full-suite and packaged lifecycle results are recorded below.
+
+Final Phase 6 validation: Release build passed with zero warnings/errors; all 162 application tests passed with real LibreOffice enabled (zero skipped). All 22 packaging checks, 8 installer checks and 21 lifecycle/fault checks passed using the final packaged tools, including running the uninstaller from the directory it removes. Real PDF pagination/text/Unicode/image/source-property inspection passed again. Six installed-app diagnostic sessions met all smoke budgets. Final popup/widget median first frames were 1,804/2,041 ms, max 1,900/2,177 ms, median hidden private memory 66.5/66.1 MiB and max 20-cycle private growth 2.9/5.4 MiB. The shared development host was busy; no performance improvement or long-duration leak-free claim is inferred. Final local ZIP hash: A75B56A21F0B5ECF1AC7D451ED3DE299E987F639FE7001AE90564EF6A061FEBC (source d7aa4dc, SourceDirty=true). Local test archives/reports remain ignored; no release was published.
+
+Unsigned deployment scripts remain subject to local execution policy; the portable executable is available when policy prevents running setup scripts. Graphical/signed setup, Apps & Features integration, Windows 10 runtime and broad hardware/accessibility certification remain outside this verified MVP. Actual Explorer right-click launch and every native-picker/favorite workflow are still beta acceptance items; isolated HKCU tests and quiet deployment commands do not imply those manual flows passed.
