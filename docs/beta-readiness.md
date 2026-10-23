@@ -1,6 +1,6 @@
 # Beta readiness — 0.1.0-beta.1 candidate
 
-The version identifies a candidate build; it does not approve distribution. Do not merge to main, create release tags or publish a public release without the project owner's explicit approval. CI retains short-lived test artifacts only. There is no deployment/release publishing job or write-scoped repository token.
+The version identifies a candidate build; it does not approve distribution. The project owner approved integrating completed feature branches into main on 2026-10-23, after passing checks. Release tags and public release publication still require separate approval. CI retains short-lived test artifacts only. There is no deployment/release publishing job or write-scoped repository token.
 
 ## CI and evidence
 
@@ -25,7 +25,8 @@ Use new result/output directories. Set FILEPILOT_LIBREOFFICE to a trusted progra
 
 ## Owner acceptance before a beta release
 
-- [ ] Approve main integration and public release separately; review distribution terms and signing plan.
+- [x] Approve main integration (2026-10-23); completed feature branches must pass checks and retain their history.
+- [ ] Approve a public release separately; review distribution terms and signing plan.
 - [ ] Review successful build/deployment and real-renderer CI runs for the intended commit.
 - [ ] Validate candidate ZIP/checksum, notices, candidate version, setup/rollback/uninstall instructions and source provenance.
 - [ ] Inspect representative real DOCX PDFs visually, including installed fonts, tables/images, page breaks and property policy.
@@ -39,4 +40,8 @@ Use new result/output directories. Set FILEPILOT_LIBREOFFICE to a trusted progra
 Include the version shown in Settings, package/source revision, Windows edition/build, runtime/engine version, action, expected/actual result and reproduction steps with disposable files. Redact personal paths and document contents. Do not upload credentials, private documents or whole diagnostic directories. FilePilot has no telemetry, background reporting or automatic crash upload; issue submission is a user action.
 
 Local Phase 7 checks: Release build had zero warnings/errors; all 162 tests passed with the real engine enabled and TRX output was retained. All 24 packaging checks, 8 installer checks and 21 packaged lifecycle checks passed. Actionlint 1.7.12 accepted the workflow. The CI-only engine setup script refused the local workspace as intended, before installation. File metadata reports 0.1.0-beta.1, and the updated ready feedback was observed in the popup. A later Settings capture failed with "no screenshot targets found"; the new version footer was not manually certified by that attempt. The Phase 6 fixed-footer/focus/Escape and light/dark interactive checks remain recorded separately. No saved preferences were changed by these checks.
-The pinned CI PDF inspection tool versions also passed the local synthetic-PDF checks. Hosted CI results must still be checked in Actions after pushing the workflow.
+The pinned CI PDF inspection tool versions also passed the local synthetic-PDF checks. [Hosted run 39892774960](https://github.com/amirzulfadhli/FilePilot/actions/runs/39892774960) passed both jobs for commit 8b4c1d6f3fd250cac6501b43f7845830f09f0606. The real-engine report contains 162 passed tests with no skips; independent PDF inspection passed and both rendered synthetic pages were visually reviewed. The clean hosted package also passed extracted-package startup/memory smoke checks on this Windows 11 host. These are fixture/smoke results, not certification of arbitrary documents, extended sessions or other Windows editions.
+
+Phase 7 implementation is complete. The unchecked items above remain release acceptance gates and carry forward into Phase 8 stabilization. They do not authorize publishing a release. Before main integration, rerun local build/package/deployment checks and require successful hosted jobs for the final Phase 7 commit; do not infer success from the earlier run alone.
+
+Final Phase 7 local preflight (2026-10-23): Release build passed with zero warnings/errors, all 162 tests passed with the real engine, and 24 package/script, 8 installer and 21 packaged deployment lifecycle checks passed again. The packaged Windows 11 popup and Settings window were opened interactively: the 0.1.0-beta.1 footer and fixed Save/Cancel controls were visible, shortcut text was selected on entry, and Escape returned to the popup without saving. This successful retry supersedes the earlier failed capture for the version footer only; it does not complete the broader accessibility or Explorer acceptance checklist.

@@ -216,7 +216,7 @@ Unverified Phase 3 desktop flows: full favorite-folder picker/add/remove/move in
 5. Phase 5 — optional single-DOCX → PDF conversion verified with real LibreOffice 26.8.1.1 on Windows 11, source-property minimization, short local engine workspaces, cancellation/timeout/error handling and initial widget usability checks. See docs/phase-5-documents.md for evidence and limits.
 6. Phase 6 — packaged per-user installation, guarded upgrade/rollback/uninstall, Unicode Start Menu shortcuts, version-scoped Explorer integration and widget usability/stability checks. See [Phase 6 details](docs/phase-6-usability.md). Installer signing and optional Windows 11 primary-menu integration remain later work.
 
-7. Phase 7 (in progress) — beta candidate metadata, Windows CI/package artifacts, real-renderer acceptance, documentation and final usability polish. No automatic merge or public release.
+7. Phase 7 — beta candidate metadata, Windows CI/package artifacts, real-renderer acceptance and documentation. Both hosted jobs passed for the initial candidate; see [beta readiness and evidence](docs/beta-readiness.md). Main integration is owner-approved subject to checks; public release still requires separate approval.
 
 Windows 10 and broad hardware/accessibility acceptance remain unverified release limitations, not inferred from Windows 11 test results.
 
