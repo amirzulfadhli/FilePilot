@@ -102,5 +102,13 @@ if ($IsWindows) {
     catch { if ($_.Exception.Message -notlike '*inside this repository*') { throw }; $rejected = $true }
     if (-not $rejected) { throw 'Builder accepted an output path outside artifacts.' }
     $script:passed++
+    foreach ($resultsPath in @($root, (Join-Path $repository 'outside-results'))) {
+        $newOutput = Join-Path $root ('not-created-' + [Guid]::NewGuid().ToString('N'))
+        $rejected = $false
+        try { & (Join-Path $PSScriptRoot 'Build-Package.ps1') -OutputDirectory $newOutput -TestResultsDirectory $resultsPath | Out-Null }
+        catch { if ($_.Exception.Message -notlike '*TestResultsDirectory*') { throw }; $rejected = $true }
+        if (-not $rejected -or (Test-Path -LiteralPath $newOutput)) { throw 'Invalid/existing report destination was not refused before building.' }
+        $script:passed++
+    }
 }
 [pscustomobject]@{ Passed = $script:passed; Failed = 0; Fixtures = $root }

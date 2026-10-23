@@ -57,7 +57,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         {
             selectedFile = actions.Inspect(path);
             selection = [selectedFile];
-            Status = "Ready. Move File moves this file when you confirm a destination folder.";
+            Status = "Ready. Choose an action. Existing files will not be overwritten.";
         }
         catch (Exception ex) when (IsExpected(ex))
         {

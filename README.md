@@ -2,6 +2,8 @@
 
 A local Windows 10/11 file-action utility built with C# / .NET 10 and WPF. Phase 1 provides file details, Copy Path, and safe Move File. Phase 2 adds per-user Explorer integration and PNG/JPEG/WebP conversion. Phase 3 provides a borderless floating popup, configurable global shortcut, batch conversion, quick rename, and favorite folders. No background service, cloud API, accounts, database, telemetry, or administrator privileges are required by the application.
 
+The build version is **0.1.0-beta.1 candidate**, not an approved public release. See [beta readiness and CI](docs/beta-readiness.md) and [CHANGELOG](CHANGELOG.md). Main integration and public release require separate owner approval.
+
 ## Build and run
 
 Install the .NET 10 SDK with Windows Desktop support. From the repository directory in PowerShell:
@@ -213,6 +215,8 @@ Unverified Phase 3 desktop flows: full favorite-folder picker/add/remove/move in
 4. Phase 4 — portable packaging, startup/memory tooling, extracted-package runtime checks and resident lifecycle fix completed for the available Windows 11 host; Windows 10 is explicitly unverified.
 5. Phase 5 — optional single-DOCX → PDF conversion verified with real LibreOffice 26.8.1.1 on Windows 11, source-property minimization, short local engine workspaces, cancellation/timeout/error handling and initial widget usability checks. See docs/phase-5-documents.md for evidence and limits.
 6. Phase 6 — packaged per-user installation, guarded upgrade/rollback/uninstall, Unicode Start Menu shortcuts, version-scoped Explorer integration and widget usability/stability checks. See [Phase 6 details](docs/phase-6-usability.md). Installer signing and optional Windows 11 primary-menu integration remain later work.
+
+7. Phase 7 (in progress) — beta candidate metadata, Windows CI/package artifacts, real-renderer acceptance, documentation and final usability polish. No automatic merge or public release.
 
 Windows 10 and broad hardware/accessibility acceptance remain unverified release limitations, not inferred from Windows 11 test results.
 

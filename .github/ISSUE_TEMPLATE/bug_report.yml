@@ -1,0 +1,32 @@
+name: Bug report
+description: Report a reproducible FilePilot problem using disposable files
+title: '[Bug] '
+body:
+  - type: markdown
+    attributes:
+      value: 'Redact personal paths and document contents. Do not attach credentials or private files.'
+  - type: input
+    id: version
+    attributes:
+      label: FilePilot version and package/source revision
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows edition/build and .NET Desktop Runtime version
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce with disposable files
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual behavior
+      description: Include a redacted error message and LibreOffice version if relevant.
+    validations:
+      required: true

@@ -1,6 +1,6 @@
 #requires -Version 7.2
 [CmdletBinding()]
-param([string]$OutputDirectory)
+param([string]$OutputDirectory, [string]$TestResultsDirectory)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -22,6 +22,14 @@ while ($ancestor) {
     }
     $ancestor = [IO.Path]::GetDirectoryName($ancestor)
 }
+$results = $null
+if ($TestResultsDirectory) {
+    $results = [IO.Path]::GetFullPath($TestResultsDirectory, $repository)
+    if (-not $results.StartsWith($artifactsRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -or (Test-Path -LiteralPath $results)) { throw 'TestResultsDirectory must be a new directory inside artifacts.' }
+    for ($parent = [IO.Path]::GetDirectoryName($results); $parent; $parent = [IO.Path]::GetDirectoryName($parent)) {
+        if ((Test-Path -LiteralPath $parent) -and ((Get-Item -LiteralPath $parent -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Test result paths cannot contain reparse points.' }
+    }
+}
 [IO.Directory]::CreateDirectory($output) | Out-Null
 $publish = Join-Path $output 'publish'
 Push-Location $repository
@@ -29,11 +37,16 @@ try {
     & (Join-Path $PSScriptRoot 'Test-PackageTools.ps1') | Out-Host
     & dotnet build FilePilot.slnx -c Release --verbosity minimal | Out-Host
     if ($LASTEXITCODE -ne 0) { throw 'Release build failed. No package was finalized.' }
-    & dotnet test FilePilot.slnx -c Release --no-build --no-restore --verbosity minimal | Out-Host
+    $testArguments = @('test', 'FilePilot.slnx', '-c', 'Release', '--no-build', '--no-restore', '--verbosity', 'minimal')
+    if ($results) {
+        $testArguments += @('--logger', 'trx;LogFileName=FilePilot.trx', '--results-directory', $results)
+    }
+    & dotnet @testArguments | Out-Host
     if ($LASTEXITCODE -ne 0) { throw 'Automated tests failed. No package was finalized.' }
     & dotnet publish src/FilePilot.App -c Release -r win-x64 --self-contained false -p:DebugType=None -p:DebugSymbols=false -o $publish --verbosity minimal | Out-Host
     if ($LASTEXITCODE -ne 0) { throw 'Windows publish failed. No package was finalized.' }
     Copy-Item -LiteralPath (Join-Path $repository 'README.md') -Destination (Join-Path $publish 'README.md')
+    if (Test-Path -LiteralPath (Join-Path $repository 'CHANGELOG.md')) { Copy-Item -LiteralPath (Join-Path $repository 'CHANGELOG.md') -Destination (Join-Path $publish 'CHANGELOG.md') }
     $deployment = [IO.Directory]::CreateDirectory((Join-Path $publish 'deployment')).FullName
     foreach ($tool in @('Install-FilePilot.ps1', 'Manage-FilePilot.ps1', 'Deployment.Common.ps1', 'Test-Package.ps1')) {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot $tool) -Destination (Join-Path $deployment $tool)

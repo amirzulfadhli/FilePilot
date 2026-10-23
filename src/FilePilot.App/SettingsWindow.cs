@@ -1,4 +1,5 @@
 using System.IO;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
@@ -83,6 +84,8 @@ internal sealed class SettingsWindow : Window
         actions.Children.Add(cancel);
         var apply = new Button { Content = "_Save settings", IsDefault = true };
         actions.Children.Add(apply);
+        var version = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "beta";
+        footer.Children.Add(new TextBlock { Text = $"FilePilot {version} · Local and offline", FontSize = 11, Margin = new Thickness(0, 8, 0, 0) });
         apply.Click += (_, _) =>
         {
             try { save(new(shortcut.Text.Trim(), favorites.ToArray(), dark.IsChecked == true, string.IsNullOrWhiteSpace(enginePath.Text) ? null : enginePath.Text.Trim())); DialogResult = true; }

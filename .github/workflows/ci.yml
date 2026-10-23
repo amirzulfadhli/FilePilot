@@ -1,0 +1,105 @@
+name: FilePilot CI
+
+on:
+  push:
+    branches: [main, 'feature/**']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      real_documents:
+        description: Run real LibreOffice acceptance on a disposable runner
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: filepilot-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+
+jobs:
+  build:
+    name: Windows build, tests, package and deployment
+    runs-on: windows-2025
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Release build, automated tests and validated package
+        shell: pwsh
+        run: |
+          $package = & ./scripts/Build-Package.ps1 -OutputDirectory artifacts/ci-package -TestResultsDirectory artifacts/test-results
+          if ($package.SourceDirty) { throw 'CI package must come from a clean source checkout.' }
+      - name: Installer and upgrade/uninstall checks
+        shell: pwsh
+        run: |
+          & ./scripts/Test-InstallTools.ps1 -PackagePath artifacts/ci-package/FilePilot-win-x64.zip
+          & ./scripts/Test-DeploymentTools.ps1 -PackagePath artifacts/ci-package/FilePilot-win-x64.zip
+      - name: Retain test reports and candidate package (not a release)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: FilePilot-win-x64-${{ github.sha }}
+          path: |
+            artifacts/test-results/*.trx
+            artifacts/ci-package/FilePilot-win-x64.zip
+            artifacts/ci-package/FilePilot-win-x64.zip.sha256
+          if-no-files-found: warn
+          retention-days: 7
+
+  documents:
+    name: Real LibreOffice acceptance
+    needs: build
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.real_documents) ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/feature/phase-7-beta-ci')
+    runs-on: windows-2025
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Install verified engine on disposable CI runner only
+        shell: pwsh
+        run: ./scripts/Install-CiDocumentEngine.ps1
+      - name: Run all tests with the real renderer
+        shell: pwsh
+        run: |
+          $env:FILEPILOT_LIBREOFFICE = Join-Path $env:ProgramFiles 'LibreOffice/program/soffice.com'
+          $env:FILEPILOT_DOCUMENT_TEST_OUTPUT = Join-Path $PWD 'artifacts/document-acceptance/ci'
+          New-Item -ItemType Directory -Force $env:FILEPILOT_DOCUMENT_TEST_OUTPUT | Out-Null
+          dotnet test FilePilot.slnx -c Release --logger 'trx;LogFileName=Documents.trx' --results-directory artifacts/document-results --verbosity minimal
+          if ($LASTEXITCODE -ne 0) { throw 'Real-engine acceptance failed.' }
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Independent PDF inspection and page rendering
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check -r scripts/requirements-ci.txt
+          if ($LASTEXITCODE -ne 0) { throw 'PDF inspection tools could not be installed.' }
+          python scripts/Inspect-DocumentPdf.py artifacts/document-acceptance/ci
+          if ($LASTEXITCODE -ne 0) { throw 'Independent PDF acceptance failed.' }
+      - name: Retain real-renderer test report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: FilePilot-document-tests-${{ github.sha }}
+          path: |
+            artifacts/document-results/*.trx
+            artifacts/document-acceptance/ci/pdf-inspection.json
+            artifacts/document-acceptance/ci/**/page-*.png
+          if-no-files-found: warn
+          retention-days: 7

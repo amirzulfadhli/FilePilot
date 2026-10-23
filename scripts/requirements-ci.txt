@@ -1,0 +1,4 @@
+# Development/CI PDF inspection only; not FilePilot runtime dependencies.
+pypdf==6.21.2
+pypdfium2==5.14.0
+Pillow==13.0.0

@@ -1,0 +1,42 @@
+# Beta readiness — 0.1.0-beta.1 candidate
+
+The version identifies a candidate build; it does not approve distribution. Do not merge to main, create release tags or publish a public release without the project owner's explicit approval. CI retains short-lived test artifacts only. There is no deployment/release publishing job or write-scoped repository token.
+
+## CI and evidence
+
+FilePilot CI runs on GitHub-hosted Windows Server 2025 for pushes to main/feature branches and pull requests. Official checkout/setup-dotnet/upload-artifact actions are pinned to reviewed commit SHAs, repository permission is contents:read, checkout credentials are not persisted, and candidate ZIP/checksum/TRX artifacts expire after seven days. No user credentials or cloud document services are used. CI uploads only the explicit report/archive paths, not the whole artifacts directory.
+
+The build job runs the existing Release/package pipeline (including package/script checks), then installer and upgrade/rollback/uninstall checks against the resulting ZIP. It requires a clean checkout and records its commit/hash manifest. Without an engine, three real-LibreOffice tests are explicitly skipped; a green build job alone is not document-rendering evidence. Windows Server runner success does not certify Windows 10 or all Windows 11 configurations.
+
+Real LibreOffice acceptance runs automatically on the Phase 7 beta-validation branch and can be requested through workflow_dispatch(real_documents=true) once the workflow is available for manual dispatch. It downloads the fixed official LibreOffice 26.8.1 MSI, verifies SHA-256 and publisher signature, and installs it plus Microsoft's signed x64 C++ runtime only on a disposable GitHub-hosted runner. The setup script refuses ordinary/local/self-hosted environments and is not included in FilePilot's deployment payload. It runs all tests with the real engine enabled. The app still neither downloads nor bundles LibreOffice.
+
+The real-engine test validates export/source preservation/collisions, native-renderer cancellation/exit, deadline/malformed input and cleanup. The document job also uses pinned development-only Python tools to parse the synthetic PDF independently, check A4 pagination/text/Unicode/image/source-property policy and render page PNGs. It retains those synthetic page images and the inspection JSON for review. Neither a CI TRX nor a parsed fixture certifies arbitrary Word layout: visual fidelity with representative documents remains an owner gate. Reproduce inspection with scripts/Inspect-DocumentPdf.py and the Phase 5 guide. GitHub Actions logs/run results are the authority for whether hosted jobs actually ran; workflow source presence is not a passing CI claim.
+
+## Local preflight
+
+```powershell
+pwsh -NoProfile -File scripts/Build-Package.ps1 -OutputDirectory artifacts/packages/beta-check -TestResultsDirectory artifacts/beta-results
+pwsh -NoProfile -File scripts/Test-InstallTools.ps1 -PackagePath artifacts/packages/beta-check/FilePilot-win-x64.zip
+pwsh -NoProfile -File scripts/Test-DeploymentTools.ps1 -PackagePath artifacts/packages/beta-check/FilePilot-win-x64.zip
+pwsh -NoProfile -File scripts/Test-ExtractedPackage.ps1 -Path artifacts/packages/beta-check/FilePilot-win-x64.zip -Runs 3
+```
+
+Use new result/output directories. Set FILEPILOT_LIBREOFFICE to a trusted program/soffice.com and FILEPILOT_DOCUMENT_TEST_OUTPUT to an ignored artifact directory for real-renderer tests. Review staged source, secret/artifact exclusions, clean source revision and ZIP hashes before committing. Never force-push, silently overwrite user files, or weaken Windows execution policy to run setup.
+
+## Owner acceptance before a beta release
+
+- [ ] Approve main integration and public release separately; review distribution terms and signing plan.
+- [ ] Review successful build/deployment and real-renderer CI runs for the intended commit.
+- [ ] Validate candidate ZIP/checksum, notices, candidate version, setup/rollback/uninstall instructions and source provenance.
+- [ ] Inspect representative real DOCX PDFs visually, including installed fonts, tables/images, page breaks and property policy.
+- [ ] Test actual Explorer right-click launch, picker cancellation, favorites/rename/tray, shortcut conflicts and stale-selection fallback.
+- [ ] Complete Windows 10 testing on a supported .NET edition or approve/document a narrower supported OS list. It remains explicitly unverified here.
+- [ ] Review multi-monitor/DPI, small work areas, keyboard navigation, screen-reader/high-contrast and longer-duration memory/CPU behavior.
+- [ ] Decide whether unsigned portable/PowerShell setup is acceptable for the beta; graphical setup, signing, Apps & Features entry, ARM64/x86 and automatic upgrades are not implemented.
+
+## Reporting problems
+
+Include the version shown in Settings, package/source revision, Windows edition/build, runtime/engine version, action, expected/actual result and reproduction steps with disposable files. Redact personal paths and document contents. Do not upload credentials, private documents or whole diagnostic directories. FilePilot has no telemetry, background reporting or automatic crash upload; issue submission is a user action.
+
+Local Phase 7 checks: Release build had zero warnings/errors; all 162 tests passed with the real engine enabled and TRX output was retained. All 24 packaging checks, 8 installer checks and 21 packaged lifecycle checks passed. Actionlint 1.7.12 accepted the workflow. The CI-only engine setup script refused the local workspace as intended, before installation. File metadata reports 0.1.0-beta.1, and the updated ready feedback was observed in the popup. A later Settings capture failed with "no screenshot targets found"; the new version footer was not manually certified by that attempt. The Phase 6 fixed-footer/focus/Escape and light/dark interactive checks remain recorded separately. No saved preferences were changed by these checks.
+The pinned CI PDF inspection tool versions also passed the local synthetic-PDF checks. Hosted CI results must still be checked in Actions after pushing the workflow.
