@@ -4,11 +4,17 @@ namespace FilePilot.App;
 
 public partial class App : Application
 {
+    private readonly Action<StartupEventArgs>? startupAction;
     private Widget.ResidentInstance? residentInstance;
     private Widget.WidgetHost? host;
+    public App() { }
+    // Keep a real, pumped WPF Application in window tests without launching another
+    // widget or reading the user's saved preferences inside testhost.
+    internal App(Action<StartupEventArgs> startupAction) => this.startupAction = startupAction;
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        if (startupAction is not null) { startupAction(e); return; }
         if (e.Args.Length > 0 && e.Args[0] == "--diagnostics") { RunDiagnostics(e.Args); return; }
         if (e.Args.Length is 1 or 2 && e.Args[0] is "--register-context-menu" or "--unregister-context-menu" && (e.Args.Length == 1 || e.Args[1] == "--quiet"))
         {
