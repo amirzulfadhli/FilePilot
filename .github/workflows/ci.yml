@@ -2,7 +2,7 @@ name: FilePilot CI
 
 on:
   push:
-    branches: [main, 'feature/**']
+    branches: [main, 'feature/**', 'codex/**']
   pull_request:
   workflow_dispatch:
     inputs:
@@ -65,7 +65,11 @@ jobs:
     needs: build
     if: >-
       (github.event_name == 'workflow_dispatch' && inputs.real_documents) ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/feature/phase-7-beta-ci')
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'push' &&
+        (github.ref == 'refs/heads/main' ||
+         github.ref == 'refs/heads/feature/phase-7-beta-ci' ||
+         github.ref == 'refs/heads/codex/phase-8-stabilization'))
     runs-on: windows-2025
     timeout-minutes: 25
     steps:

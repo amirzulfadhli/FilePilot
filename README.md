@@ -218,6 +218,8 @@ Unverified Phase 3 desktop flows: full favorite-folder picker/add/remove/move in
 
 7. Phase 7 — beta candidate metadata, Windows CI/package artifacts, real-renderer acceptance and documentation. See [beta readiness and evidence](docs/beta-readiness.md) and [WPF STA stabilization](docs/phase-7-sta-stabilization.md) for the failed gate, dispatcher correction and repeated lifecycle acceptance. Main integration is owner-approved subject to checks; public release still requires separate approval.
 
+8. Phase 8 (preparation) — stabilize diagnostics, improve widget focus/accessibility and Windows contrast handling, extend performance/compatibility acceptance and prepare release evidence. Phases 2–7 were integrated into main at dd6ec8d after both required CI jobs passed. See [Phase 8 preparation and acceptance plan](docs/phase-8-preparation.md). UI changes and broader acceptance remain upcoming work; no release is approved.
+
 Windows 10 and broad hardware/accessibility acceptance remain unverified release limitations, not inferred from Windows 11 test results.
 
 ## Manual acceptance checklist
