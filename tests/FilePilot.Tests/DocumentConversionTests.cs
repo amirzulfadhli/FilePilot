@@ -125,53 +125,68 @@ public sealed class DocumentConversionTests : IDisposable
         await Assert.ThrowsAsync<ArgumentException>(() => Converter(engine).ConvertAsync(new(source, Path.Combine(output, ".."))));
         Assert.Equal(0, engine.Calls); AssertClean();
     }
-    private string FixtureEngine(string mode)
+    private string FixtureData => Path.Combine(root, "engine data with spaces 文");
+    private IDocumentPdfEngine FixtureEngine(string mode, TimeSpan? timeout = null)
     {
-        var folder = Directory.CreateDirectory(Path.Combine(root, "engine with spaces 文")).FullName;
-        foreach (var source in Directory.GetFiles(Path.Combine(AppContext.BaseDirectory, "EngineFixture"))) File.Copy(source, Path.Combine(folder, Path.GetFileName(source)));
-        File.Copy(Path.Combine(folder, "FilePilot.EngineFixture.exe"), Path.Combine(folder, "soffice.com"));
-        File.WriteAllText(Path.Combine(folder, "mode.txt"), mode);
-        return Path.Combine(folder, "soffice.com");
+        Directory.CreateDirectory(FixtureData);
+        var executable = Path.Combine(AppContext.BaseDirectory, "EngineFixture", "engine with spaces 文", "soffice.com");
+        return new FakeEngine(async (input, destination, profile, token) =>
+        {
+            File.WriteAllText(Path.Combine(profile, "fixture-control.json"), JsonSerializer.Serialize(new { Root = FixtureData, Mode = mode }));
+            try { await new LibreOfficePdfEngine(executable, timeout).ExportAsync(input, destination, profile, token); }
+            finally
+            {
+                var marker = Path.Combine(FixtureData, "started.txt");
+                if (File.Exists(marker))
+                {
+                    var pid = int.Parse(File.ReadAllText(marker), System.Globalization.CultureInfo.InvariantCulture);
+                    System.Diagnostics.Process? process = null;
+                    try { process = System.Diagnostics.Process.GetProcessById(pid); }
+                    catch (ArgumentException) { } // The owned process has already left the process table.
+                    using (process) Assert.True(process is null || process.HasExited, $"Owned fixture process {pid} is still running after {mode}.");
+                }
+            }
+        });
     }
     [Fact]
     public async Task NativeInitializationFailureExplainsRuntimeRepairAndCleansWork()
     {
-        var source = Docx(); var executable = FixtureEngine("missing-runtime");
-        var error = await Assert.ThrowsAsync<DocumentEngineException>(() => Converter(new LibreOfficePdfEngine(executable)).ConvertAsync(new(source, output)));
+        var source = Docx();
+        var error = await Assert.ThrowsAsync<DocumentEngineException>(() => Converter(FixtureEngine("missing-runtime")).ConvertAsync(new(source, output)));
         Assert.Contains("0xC0000135", error.Message); Assert.Contains("Visual C++ runtime", error.Message); AssertClean();
     }
     [Theory]
     [InlineData("success")][InlineData("noisy")]
     public async Task RealSubprocessUsesQuotedArgumentsAndDrainsBothPipes(string mode)
     {
-        var source = Docx(); var executable = FixtureEngine(mode);
-        var result = await Converter(new LibreOfficePdfEngine(executable, TimeSpan.FromSeconds(15))).ConvertAsync(new(source, output));
+        var source = Docx();
+        var result = await Converter(FixtureEngine(mode, TimeSpan.FromSeconds(15))).ConvertAsync(new(source, output));
         Assert.True(File.Exists(result.OutputPath));
-        var args = JsonSerializer.Deserialize<string[]>(File.ReadAllText(Path.Combine(Path.GetDirectoryName(executable)!, "arguments.json")))!;
+        var args = JsonSerializer.Deserialize<string[]>(File.ReadAllText(Path.Combine(FixtureData, "arguments.json")))!;
         Assert.Contains("pdf:writer_pdf_Export", args); Assert.Contains("--headless", args);
         Assert.StartsWith("-env:UserInstallation=file:///", args[0]); Assert.Contains("%20", args[0]);
-        var profile = File.ReadAllText(Path.Combine(Path.GetDirectoryName(executable)!, "requested-profile.xcu"));
+        var profile = File.ReadAllText(Path.Combine(FixtureData, "requested-profile.xcu"));
         Assert.Contains("DisableMacrosExecution", profile); Assert.Contains("DisableActiveContent", profile); Assert.Contains("<value>true</value>", profile); AssertClean();
     }
     [Fact]
     public async Task RealSubprocessFailureIsBoundedAndCleansWork()
     {
-        var source = Docx(); var executable = FixtureEngine("fail");
-        var error = await Assert.ThrowsAsync<DocumentEngineException>(() => Converter(new LibreOfficePdfEngine(executable)).ConvertAsync(new(source, output)));
+        var source = Docx();
+        var error = await Assert.ThrowsAsync<DocumentEngineException>(() => Converter(FixtureEngine("fail")).ConvertAsync(new(source, output)));
         Assert.Contains("exit 7", error.Message); Assert.True(error.Message.Length < 5000); AssertClean();
     }
     [Fact]
     public async Task RealSubprocessTimeoutAndCancellationStopOwnedEngine()
     {
-        var source = Docx(); var executable = FixtureEngine("hang");
-        var error = await Assert.ThrowsAsync<DocumentEngineException>(() => Converter(new LibreOfficePdfEngine(executable, TimeSpan.FromSeconds(2))).ConvertAsync(new(source, output)));
+        var source = Docx();
+        var error = await Assert.ThrowsAsync<DocumentEngineException>(() => Converter(FixtureEngine("hang", TimeSpan.FromSeconds(2))).ConvertAsync(new(source, output)));
         Assert.Contains("time limit", error.Message); Assert.False(error.MayStillBeRunning); AssertClean();
-        File.Delete(Path.Combine(Path.GetDirectoryName(executable)!, "started.txt"));
+        File.Delete(Path.Combine(FixtureData, "started.txt"));
         using var cancel = new CancellationTokenSource();
-        var task = Converter(new LibreOfficePdfEngine(executable)).ConvertAsync(new(source, output), cancel.Token);
+        var task = Converter(FixtureEngine("hang")).ConvertAsync(new(source, output), cancel.Token);
         var start = System.Diagnostics.Stopwatch.StartNew();
-        while (!File.Exists(Path.Combine(Path.GetDirectoryName(executable)!, "started.txt")) && start.Elapsed < TimeSpan.FromSeconds(10)) await Task.Delay(20);
-        Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(executable)!, "started.txt")));
+        while (!File.Exists(Path.Combine(FixtureData, "started.txt")) && start.Elapsed < TimeSpan.FromSeconds(10)) await Task.Delay(20);
+        Assert.True(File.Exists(Path.Combine(FixtureData, "started.txt")));
         cancel.Cancel(); await Assert.ThrowsAnyAsync<OperationCanceledException>(() => task); AssertClean();
     }
     [Fact]
