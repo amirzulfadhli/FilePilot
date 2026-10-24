@@ -42,9 +42,16 @@ internal sealed class WidgetHost : IDisposable
         if (message == 0x0312 && (int)wParam == hotkeyId)
         {
             handled = true;
-            if (!activating && !window.IsWorking && !window.IsDialogOpen) ActivateFromExplorer();
+            ActivateFromShortcut();
         }
         return 0;
+    }
+    internal void ActivateFromShortcut()
+    {
+        if (activating || window.IsDialogOpen) return;
+        // Reopen the active operation without replacing its files or touching Explorer COM.
+        if (window.IsWorking) window.ShowPopup();
+        else ActivateFromExplorer();
     }
     private async void ActivateFromExplorer()
     {

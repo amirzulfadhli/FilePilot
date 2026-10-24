@@ -48,6 +48,11 @@ public partial class MainWindow
         Activate();
         PopupPlacement.Place(this, cursor);
         if (Model.CopyPathCommand.CanExecute(null)) CopyPathButton.Focus();
+        else if (Model.CanCancelConversion)
+        {
+            if (Model.IsDocumentSelected) CancelDocumentButton.Focus();
+            else CancelImageButton.Focus();
+        }
         else if (Model.CanChooseFile) ChooseFilesButton.Focus();
     }
     internal void ExitWidget()
@@ -83,6 +88,15 @@ public partial class MainWindow
     private void CanOpenFilesCommand(object sender, CanExecuteRoutedEventArgs e) { e.CanExecute = Model.CanChooseFile; e.Handled = true; }
     private void OpenFilesCommand(object sender, ExecutedRoutedEventArgs e) => ChooseFile(sender, e);
     private void OpenSettings(object sender, RoutedEventArgs e) => ShowSettings();
+    private void CanOpenHelp(object sender, CanExecuteRoutedEventArgs e)
+    { e.CanExecute = DataContext is MainViewModel model && !model.IsBusy && !IsDialogOpen; e.Handled = true; }
+    private void OpenHelp(object sender, ExecutedRoutedEventArgs e)
+    {
+        if (Model.IsBusy || IsDialogOpen) return;
+        IsDialogOpen = true;
+        try { new HelpWindow(settings.Shortcut, resident) { Owner = this }.ShowDialog(); }
+        finally { IsDialogOpen = false; }
+    }
     internal void ShowSettings()
     {
         if (Model.IsBusy || IsDialogOpen) return;

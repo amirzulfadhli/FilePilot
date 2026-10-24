@@ -118,8 +118,9 @@ public sealed class WindowTests(ITestOutputHelper output)
             var dismiss = (Button)window.FindName("DismissButton");
             Assert.Equal("Close popup", AutomationProperties.GetName(dismiss));
             Assert.IsType<MainViewModel>(window.DataContext);
-            Assert.Single(window.InputBindings);
-            Assert.Single(window.CommandBindings);
+            Assert.Equal(2, window.InputBindings.Count);
+            Assert.Contains(window.InputBindings.Cast<InputBinding>(), binding => binding is KeyBinding { Key: Key.F1 } && binding.Command == ApplicationCommands.Help);
+            Assert.Equal(2, window.CommandBindings.Count);
             Assert.Equal(System.Windows.Input.ApplicationCommands.Open, ((System.Windows.Input.CommandBinding)window.CommandBindings[0]).Command);
             Assert.Equal(WindowStyle.None, window.WindowStyle);
             Assert.Equal(ResizeMode.NoResize, window.ResizeMode);
@@ -178,11 +179,85 @@ public sealed class WindowTests(ITestOutputHelper output)
             Assert.Contains(settingsActions.Children.Cast<System.Windows.UIElement>(), child => child is System.Windows.Controls.Button { IsDefault: true });
             await VerifyAvailableMonitorsAsync(window, trace);
             trace.Run("scaled work-area layout", () => VerifyScaledLayout(window, settings));
+            trace.Run("Settings.Close after layout checks", settings.Close);
+            settings = null;
+            await VerifyBusyShortcutAsync(window, trace);
+            var help = new HelpWindow("Ctrl+Alt+F", true) { Owner = window };
+            try
+            {
+                await ShowAndRenderAsync(help, help.Show, "Help.Show", trace);
+                var layout = Assert.IsType<DockPanel>(help.Content);
+                var close = Assert.IsType<Button>(layout.Children[0]);
+                Assert.True(close.IsCancel);
+                Assert.True(close.IsDefault);
+                Assert.Equal(Dock.Bottom, DockPanel.GetDock(close));
+                var scroll = Assert.IsType<ScrollViewer>(layout.Children[1]);
+                Assert.Same(scroll, FocusManager.GetFocusedElement(help));
+                var paragraphs = ((StackPanel)scroll.Content).Children.Cast<TextBlock>().Select(text => text.Text).ToArray();
+                Assert.Contains(paragraphs, text => text.Contains("Ctrl+Alt+F"));
+                help.MaxWidth = 320; help.MaxHeight = 384; help.UpdateLayout();
+                var bounds = close.TransformToAncestor(layout).TransformBounds(new Rect(close.RenderSize));
+                Assert.True(bounds.Bottom <= layout.ActualHeight + 1);
+                Assert.True(ApplicationCommands.Help.CanExecute(null, window));
+            }
+            finally { trace.Run("Help.Close", help.Close); }
         }
         finally
         {
             if (settings is not null) trace.Run("Settings.Close", settings.Close);
             trace.Run("MainWindow.Close", window.Close);
+        }
+    }
+
+    private static async Task VerifyBusyShortcutAsync(MainWindow window, Checkpoints trace)
+    {
+        var originalModel = window.DataContext;
+        var converter = new BlockingConverter();
+        var model = new MainViewModel(_ => { }, converter);
+        var source = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "FilePilot-busy-" + Guid.NewGuid().ToString("N") + ".png");
+        System.IO.File.WriteAllText(source, "Unchanged lifecycle fixture; the injected converter does not decode it.");
+        Task? conversion = null;
+        try
+        {
+            window.DataContext = model;
+            model.LoadFile(source);
+            conversion = model.ConvertAsync();
+            await converter.Started.Task;
+            Assert.True(model.IsBusy);
+            Assert.False(ApplicationCommands.Help.CanExecute(null, window));
+            Assert.False(((Button)window.FindName("HelpButton")).IsEnabled);
+            window.Hide();
+            using var host = new FilePilot.App.Widget.WidgetHost(window);
+            trace.Run("busy shortcut reopens without Explorer capture", host.ActivateFromShortcut);
+            Assert.True(window.IsVisible);
+            Assert.Equal(source, model.FullPath);
+            Assert.True(model.CanCancelConversion);
+            Assert.Same(window.FindName("CancelImageButton"), FocusManager.GetFocusedElement(window));
+            model.CancelConversion();
+            await conversion;
+            Assert.False(model.IsBusy);
+            Assert.Null(model.LastOutputPath);
+            Assert.Contains("cancelled", model.Status);
+            Assert.True(System.IO.File.Exists(source));
+        }
+        finally
+        {
+            model.CancelConversion();
+            if (conversion is not null) await conversion;
+            window.DataContext = originalModel;
+            System.IO.File.Delete(source);
+        }
+    }
+
+    private sealed class BlockingConverter : FilePilot.Core.Conversion.IFileConverter
+    {
+        internal TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public IReadOnlyList<FilePilot.Core.Conversion.ImageFileFormat> GetOutputFormats(string path) => [FilePilot.Core.Conversion.ImageFileFormat.Jpg];
+        public async Task<FilePilot.Core.Conversion.ConversionResult> ConvertAsync(FilePilot.Core.Conversion.ConversionRequest request, CancellationToken cancellationToken = default)
+        {
+            Started.TrySetResult();
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            throw new InvalidOperationException("The lifecycle test must cancel its converter.");
         }
     }
 

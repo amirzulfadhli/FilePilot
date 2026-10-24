@@ -6,8 +6,9 @@
         Foreground="{DynamicResource TextBrush}" FontFamily="Segoe UI" FontSize="14" UseLayoutRounding="True" SnapsToDevicePixels="True">
     <WindowChrome.WindowChrome><WindowChrome CaptionHeight="0" CornerRadius="12" ResizeBorderThickness="0" GlassFrameThickness="0" /></WindowChrome.WindowChrome>
     <Window.Resources><BooleanToVisibilityConverter x:Key="BooleanVisibility" /></Window.Resources>
-    <Window.CommandBindings><CommandBinding Command="ApplicationCommands.Open" Executed="OpenFilesCommand" CanExecute="CanOpenFilesCommand" /></Window.CommandBindings>
+    <Window.CommandBindings><CommandBinding Command="ApplicationCommands.Open" Executed="OpenFilesCommand" CanExecute="CanOpenFilesCommand" /><CommandBinding Command="ApplicationCommands.Help" Executed="OpenHelp" CanExecute="CanOpenHelp" /></Window.CommandBindings>
     <Window.InputBindings>
+        <KeyBinding Key="F1" Command="ApplicationCommands.Help" />
         <KeyBinding Key="C" Modifiers="Control+Shift" Command="{Binding CopyPathCommand}" />
     </Window.InputBindings>
     <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="12"><Grid Margin="16">
@@ -74,7 +75,7 @@
             <Grid>
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                 <Button Content="Con_vert" Click="ConvertImage" IsEnabled="{Binding CanConvert}" />
-                <Button Grid.Column="1" Content="C_ancel" Click="CancelConversion" IsEnabled="{Binding CanCancelConversion}" Margin="8,0,0,0" />
+                <Button x:Name="CancelImageButton" Grid.Column="1" Content="C_ancel" Click="CancelConversion" IsEnabled="{Binding CanCancelConversion}" Margin="8,0,0,0" />
                 <Button Grid.Column="2" Content="_Open folder" Click="OpenOutputFolder" IsEnabled="{Binding CanOpenOutputFolder}" Margin="8,0,0,0" ToolTip="{Binding LastOutputPath}" />
             </Grid>
             <ProgressBar Height="3" Margin="0,8,0,0" IsIndeterminate="{Binding IsBusy}" Visibility="{Binding IsBusy, Converter={StaticResource BooleanVisibility}}" AutomationProperties.Name="File operation in progress" />
@@ -88,7 +89,7 @@
             </DockPanel>
             <UniformGrid Columns="3">
                 <Button Content="Export _PDF" Click="ConvertDocument" IsEnabled="{Binding CanConvertDocument}" Margin="0,0,4,0" />
-                <Button Content="C_ancel export" Click="CancelConversion" IsEnabled="{Binding CanCancelConversion}" Margin="2,0,2,0" ToolTip="Cancel document export (Alt+A)" />
+                <Button x:Name="CancelDocumentButton" Content="C_ancel export" Click="CancelConversion" IsEnabled="{Binding CanCancelConversion}" Margin="2,0,2,0" ToolTip="Cancel document export (Alt+A)" />
                 <Button Content="_Open PDF folder" Click="OpenOutputFolder" IsEnabled="{Binding CanOpenOutputFolder}" Margin="4,0,0,0" ToolTip="Open PDF folder (Alt+O)" />
             </UniformGrid>
             <ProgressBar Height="3" Margin="0,8,0,0" IsIndeterminate="{Binding IsBusy}" Visibility="{Binding IsBusy, Converter={StaticResource BooleanVisibility}}" AutomationProperties.Name="Document export in progress" />
@@ -98,5 +99,5 @@
         </StackPanel></ScrollViewer>
         <ScrollViewer Grid.Row="2" MinHeight="58" MaxHeight="100" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><TextBlock x:Name="StatusText" Text="{Binding Status, NotifyOnTargetUpdated=True}" TargetUpdated="StatusTextUpdated" Margin="0,16,0,8" TextWrapping="Wrap"
                    AutomationProperties.LiveSetting="Polite" /></ScrollViewer>
-        <StackPanel Grid.Row="3"><TextBlock x:Name="ShortcutHint" Text="ESC TO DISMISS" FontSize="10" Foreground="{DynamicResource MutedBrush}" Margin="0,0,0,6" /><DockPanel><Button DockPanel.Dock="Right" Content="E_xit" Click="ExitApplication" Padding="10,8" Margin="6,0,0,0" ToolTip="Stop FilePilot and release its shortcut" /><Button x:Name="ChooseFilesButton" Content="C_hoose files…" ToolTip="Choose one or more files (Ctrl+O)" Click="ChooseFile" IsEnabled="{Binding CanChooseFile}" /></DockPanel></StackPanel>
+        <StackPanel Grid.Row="3"><TextBlock x:Name="ShortcutHint" Text="ESC TO DISMISS" FontSize="10" Foreground="{DynamicResource MutedBrush}" Margin="0,0,0,6" /><DockPanel><Button DockPanel.Dock="Right" Content="E_xit" Click="ExitApplication" Padding="10,8" Margin="6,0,0,0" ToolTip="Stop FilePilot and release its shortcut" /><Button x:Name="HelpButton" DockPanel.Dock="Right" Content="?" Command="ApplicationCommands.Help" IsEnabled="{Binding CanChooseFile}" AutomationProperties.Name="Help and keyboard shortcuts" ToolTip="Help (F1)" Padding="10,8" Margin="6,0,0,0" /><Button x:Name="ChooseFilesButton" Content="C_hoose files…" ToolTip="Choose one or more files (Ctrl+O)" Click="ChooseFile" IsEnabled="{Binding CanChooseFile}" /></DockPanel></StackPanel>
     </Grid></Border></Window>
