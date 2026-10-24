@@ -67,7 +67,7 @@ public sealed class DocxPdfConverter(IDocumentPdfEngine engine, DocumentConversi
             {
                 // Delete only the freshly created, validated child; never a source or chosen destination folder.
                 LocalPathPolicy.Validate(job);
-                try { Directory.Delete(job, recursive: true); }
+                try { await DocumentWorkCleanup.DeleteAsync(workRoot, job); }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 { throw new DocumentConversionException($"Temporary document work could not be removed: {job}. Check the output folder before retrying.", ex); }
             }

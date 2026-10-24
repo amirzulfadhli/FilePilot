@@ -10,6 +10,7 @@
 - Cached palettes and opt-in extended popup/Settings/hidden-idle measurements; CI checks extracted-package startup, memory and native compatibility.
 - Offline F1 quick-start help and shortcut reopening of a hidden conversion with Cancel focused, preserving its selected files.
 - Visible help focus in light/dark/contrast palettes, routed modal lifecycle checks and real Explorer/picker/native-cancellation acceptance evidence.
+- Bounded cleanup of transient Windows sharing locks after document-engine shutdown, retaining and reporting persistent locks.
 - Per-user classic Explorer verbs for images/DOCX and packaged installation, version switching, rollback and guarded uninstall tools.
 - Windows CI for Release builds, automated tests, candidate package integrity and deployment lifecycle checks; separate real-renderer acceptance.
 
