@@ -193,6 +193,7 @@ public sealed class WindowTests(ITestOutputHelper output)
                 Assert.Equal(Dock.Bottom, DockPanel.GetDock(close));
                 var scroll = Assert.IsType<ScrollViewer>(layout.Children[1]);
                 Assert.Same(scroll, FocusManager.GetFocusedElement(help));
+                Assert.Same(Application.Current.FindResource("HelpFocusVisual"), scroll.FocusVisualStyle);
                 var paragraphs = ((StackPanel)scroll.Content).Children.Cast<TextBlock>().Select(text => text.Text).ToArray();
                 Assert.Contains(paragraphs, text => text.Contains("Ctrl+Alt+F"));
                 help.MaxWidth = 320; help.MaxHeight = 384; help.UpdateLayout();
@@ -201,12 +202,42 @@ public sealed class WindowTests(ITestOutputHelper output)
                 Assert.True(ApplicationCommands.Help.CanExecute(null, window));
             }
             finally { trace.Run("Help.Close", help.Close); }
+            VerifyRoutedHelp(window, trace);
         }
         finally
         {
             if (settings is not null) trace.Run("Settings.Close", settings.Close);
             trace.Run("MainWindow.Close", window.Close);
         }
+    }
+
+    private static void VerifyRoutedHelp(MainWindow window, Checkpoints trace)
+    {
+        Exception? modalFailure = null;
+        window.Dispatcher.BeginInvoke(new Action(() =>
+        {
+            HelpWindow? dialog = null;
+            try
+            {
+                dialog = Assert.Single(window.OwnedWindows.OfType<HelpWindow>());
+                Assert.True(dialog.IsVisible);
+                Assert.True(window.IsDialogOpen);
+                // ShowDialog disables the native owner, not its IsEnabled dependency property.
+                Assert.False(IsWindowEnabled(new System.Windows.Interop.WindowInteropHelper(window).Handle));
+                Assert.False(ApplicationCommands.Help.CanExecute(null, window));
+                trace.Record("verified: routed help modal owns focus and blocks reentry");
+                window.ExitWidget();
+                Assert.True(window.IsVisible);
+            }
+            catch (Exception ex) { modalFailure = ex; }
+            finally { dialog?.Close(); }
+        }), DispatcherPriority.ApplicationIdle);
+        trace.Run("routed Help.Execute / ShowDialog", () => ApplicationCommands.Help.Execute(null, window));
+        if (modalFailure is not null) ExceptionDispatchInfo.Capture(modalFailure).Throw();
+        Assert.False(window.IsDialogOpen);
+        Assert.True(window.IsEnabled);
+        Assert.True(IsWindowEnabled(new System.Windows.Interop.WindowInteropHelper(window).Handle));
+        Assert.True(ApplicationCommands.Help.CanExecute(null, window));
     }
 
     private static async Task VerifyBusyShortcutAsync(MainWindow window, Checkpoints trace)
@@ -221,8 +252,11 @@ public sealed class WindowTests(ITestOutputHelper output)
         {
             window.DataContext = model;
             model.LoadFile(source);
+            Assert.True(model.CanConvert, model.Status);
             conversion = model.ConvertAsync();
+            trace.Record("BEGIN await injected converter start");
             await converter.Started.Task;
+            trace.Record("END await injected converter start");
             Assert.True(model.IsBusy);
             Assert.False(ApplicationCommands.Help.CanExecute(null, window));
             Assert.False(((Button)window.FindName("HelpButton")).IsEnabled);
@@ -234,7 +268,9 @@ public sealed class WindowTests(ITestOutputHelper output)
             Assert.True(model.CanCancelConversion);
             Assert.Same(window.FindName("CancelImageButton"), FocusManager.GetFocusedElement(window));
             model.CancelConversion();
+            trace.Record("BEGIN await busy shortcut cancellation");
             await conversion;
+            trace.Record("END await busy shortcut cancellation");
             Assert.False(model.IsBusy);
             Assert.Null(model.LastOutputPath);
             Assert.Contains("cancelled", model.Status);
@@ -292,52 +328,73 @@ public sealed class WindowTests(ITestOutputHelper output)
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetWindowRect(nint hwnd, out FilePilot.App.Widget.NativeMethods.Rect rectangle);
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindowEnabled(nint hwnd);
 
     private static void VerifyThemes(MainWindow window)
     {
         var resources = Application.Current.Resources;
-        var themes = new ThemeResources(resources);
-        themes.Apply(false, false);
-        var light = resources.MergedDictionaries[0];
-        themes.Apply(true, false);
-        var dark = resources.MergedDictionaries[0];
-        var expander = (Expander)window.FindName("RenameExpander");
-        expander.Measure(new Size(300, 120));
-        expander.Arrange(new Rect(0, 0, 300, 120));
-        Assert.Equal(((SolidColorBrush)window.FindResource("TextBrush")).Color,
-            ((SolidColorBrush)expander.Foreground).Color);
-        Assert.Equal(((SolidColorBrush)window.FindResource("TextBrush")).Color,
-            ((SolidColorBrush)VisualChildren<TextBlock>(expander).Single(text => text.Text == "Quick rename").Foreground).Color);
-        themes.Apply(true, true);
-        var contrast = resources.MergedDictionaries[0];
-        Assert.Equal(SystemColors.WindowColor, ((SolidColorBrush)window.FindResource("WindowBrush")).Color);
-        Assert.Equal(SystemColors.WindowTextColor, ((SolidColorBrush)window.FindResource("TextBrush")).Color);
-        Assert.Equal(SystemColors.HighlightColor, ((SolidColorBrush)window.FindResource("HoverBrush")).Color);
-        Assert.Equal(SystemColors.HighlightTextColor, ((SolidColorBrush)window.FindResource("HoverTextBrush")).Color);
-        // Test the actual implicit item template, including the paired selected text brush.
-        var item = new ComboBoxItem { Content = "PNG", IsSelected = true };
-        item.ApplyTemplate();
-        item.Measure(new Size(180, 40));
-        item.Arrange(new Rect(0, 0, 180, 40));
-        Assert.Equal(SystemColors.HighlightTextColor, ((SolidColorBrush)item.Foreground).Color);
-        Assert.Equal(SystemColors.HighlightColor, ((SolidColorBrush)((Border)item.Template.FindName("ItemBorder", item)).Background).Color);
-        Assert.Equal(SystemColors.HighlightTextColor, ((SolidColorBrush)VisualChildren<TextBlock>(item).Single().Foreground).Color);
-        var copy = (Button)window.FindName("CopyPathButton");
-        copy.IsEnabled = false;
-        copy.ApplyTemplate();
-        Assert.Equal(SystemColors.GrayTextColor, ((SolidColorBrush)copy.Foreground).Color);
-        copy.ClearValue(UIElement.IsEnabledProperty);
-        for (int i = 0; i < 100; i++)
+        var original = resources.MergedDictionaries[0];
+        try
         {
+            var themes = new ThemeResources(resources);
+            themes.Apply(false, false);
+            var light = resources.MergedDictionaries[0];
+            VerifyFocusColor(window);
+            themes.Apply(true, false);
+            var dark = resources.MergedDictionaries[0];
+            VerifyFocusColor(window);
+            var expander = (Expander)window.FindName("RenameExpander");
+            expander.Measure(new Size(300, 120));
+            expander.Arrange(new Rect(0, 0, 300, 120));
+            Assert.Equal(((SolidColorBrush)window.FindResource("TextBrush")).Color,
+                ((SolidColorBrush)expander.Foreground).Color);
+            Assert.Equal(((SolidColorBrush)window.FindResource("TextBrush")).Color,
+                ((SolidColorBrush)VisualChildren<TextBlock>(expander).Single(text => text.Text == "Quick rename").Foreground).Color);
+            themes.Apply(true, true);
+            var contrast = resources.MergedDictionaries[0];
+            VerifyFocusColor(window);
+            Assert.Equal(SystemColors.WindowColor, ((SolidColorBrush)window.FindResource("WindowBrush")).Color);
+            Assert.Equal(SystemColors.WindowTextColor, ((SolidColorBrush)window.FindResource("TextBrush")).Color);
+            Assert.Equal(SystemColors.HighlightColor, ((SolidColorBrush)window.FindResource("HoverBrush")).Color);
+            Assert.Equal(SystemColors.HighlightTextColor, ((SolidColorBrush)window.FindResource("HoverTextBrush")).Color);
+            // Test the actual implicit item template, including the paired selected text brush.
+            var item = new ComboBoxItem { Content = "PNG", IsSelected = true };
+            item.ApplyTemplate();
+            item.Measure(new Size(180, 40));
+            item.Arrange(new Rect(0, 0, 180, 40));
+            Assert.Equal(SystemColors.HighlightTextColor, ((SolidColorBrush)item.Foreground).Color);
+            Assert.Equal(SystemColors.HighlightColor, ((SolidColorBrush)((Border)item.Template.FindName("ItemBorder", item)).Background).Color);
+            Assert.Equal(SystemColors.HighlightTextColor, ((SolidColorBrush)VisualChildren<TextBlock>(item).Single().Foreground).Color);
+            var copy = (Button)window.FindName("CopyPathButton");
+            copy.IsEnabled = false;
+            copy.ApplyTemplate();
+            Assert.Equal(SystemColors.GrayTextColor, ((SolidColorBrush)copy.Foreground).Color);
+            copy.ClearValue(UIElement.IsEnabledProperty);
+            for (int i = 0; i < 100; i++)
+            {
+                themes.Apply(false, false);
+                Assert.Same(light, resources.MergedDictionaries[0]);
+                themes.Apply(true, false);
+                Assert.Same(dark, resources.MergedDictionaries[0]);
+                themes.Apply(false, true);
+                Assert.Same(contrast, resources.MergedDictionaries[0]);
+            }
             themes.Apply(false, false);
             Assert.Same(light, resources.MergedDictionaries[0]);
-            themes.Apply(true, false);
-            Assert.Same(dark, resources.MergedDictionaries[0]);
-            themes.Apply(false, true);
-            Assert.Same(contrast, resources.MergedDictionaries[0]);
         }
-        themes.Apply(false, false);
-        Assert.Same(light, resources.MergedDictionaries[0]);
+        finally { resources.MergedDictionaries[0] = original; }
+    }
+
+    private static void VerifyFocusColor(MainWindow window)
+    {
+        var focus = new Control { Style = (Style)window.FindResource("HelpFocusVisual") };
+        focus.ApplyTemplate();
+        var outline = Assert.IsType<Border>(VisualTreeHelper.GetChild(focus, 0));
+        Assert.Equal(((SolidColorBrush)window.FindResource("AccentBrush")).Color,
+            ((SolidColorBrush)outline.BorderBrush).Color);
+        Assert.True(outline.BorderThickness.Left > 0);
     }
 
     private static IEnumerable<T> VisualChildren<T>(DependencyObject root) where T : DependencyObject

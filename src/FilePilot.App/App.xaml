@@ -7,6 +7,16 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Themes/Light.xaml" />
             </ResourceDictionary.MergedDictionaries>
+            <Style x:Key="HelpFocusVisual" TargetType="Control">
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Control">
+                            <Border BorderBrush="{DynamicResource AccentBrush}" BorderThickness="2"
+                                    Margin="-3" CornerRadius="2" SnapsToDevicePixels="True" />
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
             <Style TargetType="Expander">
                 <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
             </Style>

@@ -20,6 +20,7 @@ internal sealed class HelpWindow : Window
         layout.Children.Add(close);
         var content = new StackPanel();
         var scroll = new ScrollViewer { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Focusable = true };
+        scroll.SetResourceReference(FocusVisualStyleProperty, "HelpFocusVisual");
         System.Windows.Automation.AutomationProperties.SetName(scroll, "FilePilot quick start and keyboard shortcuts");
         layout.Children.Add(scroll);
         Add("Quick file actions", true);
@@ -36,7 +37,7 @@ internal sealed class HelpWindow : Window
         Add("Use Cancel for conversion and wait for safe cleanup. " +
             (resident ? "Hiding the widget keeps work running; reopen it with the shortcut or notification icon. "
                 : "This one-shot popup stays open until work finishes. Use the taskbar to restore it if minimized. ") +
-            "Exit waits until operations finish. All file processing stays local and offline.");
+            "Finish or cancel operations before exiting. All file processing stays local and offline.");
         Loaded += (_, _) => { Widget.PopupPlacement.Place(this); scroll.Focus(); };
 
         void Add(string text, bool heading = false) => content.Children.Add(new TextBlock
