@@ -1,5 +1,7 @@
 # Phase 8 preparation — stabilization and release readiness
 
+The plan below records the preparation baseline. Subsequent implementation and available-host acceptance are recorded in [Phase 8 stabilization](phase-8-stabilization.md); unchecked platform and release gates remain explicit there.
+
 This phase is prepared on codex/phase-8-stabilization. Product UI changes listed below are not implemented by this preparation commit. FilePilot remains the unreleased 0.1.0-beta.1 candidate; public release publication and release tags require separate owner approval.
 
 ## Verified starting point

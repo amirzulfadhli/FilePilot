@@ -207,6 +207,20 @@ public sealed class WidgetTests : IDisposable
         Assert.Equal((-480, 440), PopupPlacement.Clamp(-10, 1070, 480, 640, -1920, 0, 0, 1080));
         Assert.Equal((0, 0), PopupPlacement.Clamp(-50, -30, 480, 640, 0, 0, 400, 300));
     }
+    [Theory]
+    [InlineData(96, 1920, 1080)]
+    [InlineData(120, 1536, 864)]
+    [InlineData(144, 1280, 720)]
+    [InlineData(192, 960, 540)]
+    public void WorkAreaSizeUsesMonitorDpi(uint dpi, double width, double height)
+    {
+        var size = PopupPlacement.WorkAreaSize(1920, 1080, dpi);
+        Assert.Equal(width, size.Width);
+        Assert.Equal(height, size.Height);
+        var fractional = PopupPlacement.WorkAreaSize(1919, 1079, dpi);
+        Assert.True(fractional.Width * dpi / 96d <= 1919);
+        Assert.True(fractional.Height * dpi / 96d <= 1079);
+    }
     [Fact]
     public async Task NonExplorerCaptureProvidesPickerFallback()
     {

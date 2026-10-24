@@ -11,6 +11,7 @@ internal sealed class SettingsWindow : Window
     internal SettingsWindow(WidgetSettings settings, Action<WidgetSettings> save)
     {
         Title = "FilePilot settings";
+        UseLayoutRounding = true; SnapsToDevicePixels = true;
         Width = 460; Height = 520; MinWidth = 320; MinHeight = 280; FontSize = 14;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         SetResourceReference(BackgroundProperty, "WindowBrush");

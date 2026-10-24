@@ -8,12 +8,40 @@ namespace FilePilot.App;
 public partial class MainWindow : Window
 {
     private bool darkTheme;
+    private readonly ThemeResources themeResources;
     private MainViewModel Model => (MainViewModel)DataContext;
 
     public MainWindow()
     {
         InitializeComponent();
         DataContext = new MainViewModel(path => Clipboard.SetDataObject(path, true));
+        themeResources = new ThemeResources(Application.Current.Resources);
+        ApplyTheme();
+        SystemParameters.StaticPropertyChanged += SystemSettingsChanged;
+    }
+
+    private void SystemSettingsChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(SystemParameters.HighContrast)) return;
+        if (Dispatcher.CheckAccess()) ApplyTheme();
+        else if (!Dispatcher.HasShutdownStarted) Dispatcher.BeginInvoke(new Action(() => { if (!closed) ApplyTheme(); }));
+    }
+
+    private bool closed;
+    protected override void OnClosed(EventArgs e)
+    {
+        closed = true;
+        SystemParameters.StaticPropertyChanged -= SystemSettingsChanged;
+        base.OnClosed(e);
+    }
+
+    private void StatusTextUpdated(object? sender, System.Windows.Data.DataTransferEventArgs e)
+    {
+        if (!IsVisible ||
+            !System.Windows.Automation.Peers.AutomationPeer.ListenerExists(System.Windows.Automation.Peers.AutomationEvents.LiveRegionChanged)) return;
+        var peer = System.Windows.Automation.Peers.UIElementAutomationPeer.FromElement(StatusText)
+            ?? System.Windows.Automation.Peers.UIElementAutomationPeer.CreatePeerForElement(StatusText);
+        peer?.RaiseAutomationEvent(System.Windows.Automation.Peers.AutomationEvents.LiveRegionChanged);
     }
 
     private void ChooseFile(object sender, RoutedEventArgs e)

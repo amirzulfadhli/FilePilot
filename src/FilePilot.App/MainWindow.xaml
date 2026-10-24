@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="FilePilot" Width="480" Height="{Binding WindowHeight}" MinWidth="200" MinHeight="120" WindowStyle="None" ResizeMode="NoResize" PreviewKeyDown="PopupKeyDown"
         WindowStartupLocation="Manual" Background="{DynamicResource WindowBrush}"
-        Foreground="{DynamicResource TextBrush}" FontFamily="Segoe UI" FontSize="14">
+        Foreground="{DynamicResource TextBrush}" FontFamily="Segoe UI" FontSize="14" UseLayoutRounding="True" SnapsToDevicePixels="True">
     <WindowChrome.WindowChrome><WindowChrome CaptionHeight="0" CornerRadius="12" ResizeBorderThickness="0" GlassFrameThickness="0" /></WindowChrome.WindowChrome>
     <Window.Resources><BooleanToVisibilityConverter x:Key="BooleanVisibility" /></Window.Resources>
     <Window.CommandBindings><CommandBinding Command="ApplicationCommands.Open" Executed="OpenFilesCommand" CanExecute="CanOpenFilesCommand" /></Window.CommandBindings>
@@ -18,7 +18,7 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <DockPanel Margin="0,0,0,10" MouseLeftButtonDown="DragHeader">
-            <Button DockPanel.Dock="Right" Content="×" Click="DismissPopup" AutomationProperties.Name="Hide popup" ToolTip="Hide (Escape)" Margin="6,0,0,0" />
+            <Button x:Name="DismissButton" DockPanel.Dock="Right" Content="×" Click="DismissPopup" AutomationProperties.Name="Close popup" ToolTip="Close (Escape)" Margin="6,0,0,0" />
             <Button DockPanel.Dock="Right" Content="⚙" Click="OpenSettings" AutomationProperties.Name="Settings" Margin="6,0,0,0" />
             <Button DockPanel.Dock="Right" x:Name="ThemeButton" Content="_Dark" Click="ToggleTheme" AutomationProperties.Name="Toggle light or dark theme" />
             <StackPanel>
@@ -38,10 +38,10 @@
             </StackPanel>
         </Border>
         <UniformGrid Columns="2" Margin="0,16,0,0">
-            <Button Content="_Copy Path" Command="{Binding CopyPathCommand}" Margin="0,0,6,0" ToolTip="Copy absolute path (Ctrl+Shift+C)" />
+            <Button x:Name="CopyPathButton" Content="_Copy Path" Command="{Binding CopyPathCommand}" Margin="0,0,6,0" ToolTip="Copy absolute path (Ctrl+Shift+C)" />
             <Button Content="_Move File…" Click="MoveFile" IsEnabled="{Binding CanMove}" Margin="6,0,0,0" />
         </UniformGrid>
-        <Expander Header="Quick rename" Margin="0,10,0,0" IsEnabled="{Binding CanMove}">
+        <Expander x:Name="RenameExpander" Header="Quick rename" Margin="0,10,0,0" IsEnabled="{Binding CanMove}">
             <StackPanel Margin="0,6,0,0">
                 <DockPanel><Button DockPanel.Dock="Right" Content="_Rename" Click="RenameFile" Margin="6,0,0,0" /><TextBox Text="{Binding RenameText, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="New filename" /></DockPanel>
                 <CheckBox Content="Change extension explicitly" IsChecked="{Binding ChangeExtension}" Foreground="{DynamicResource TextBrush}" Margin="0,6,0,0" />
@@ -96,7 +96,7 @@
         </StackPanel>
         <Expander Header="Batch details" Visibility="{Binding IsBatch, Converter={StaticResource BooleanVisibility}}" Margin="0,8,0,0"><TextBox Text="{Binding BatchDetails, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" MaxHeight="160" VerticalScrollBarVisibility="Auto" AutomationProperties.Name="Batch results" /></Expander>
         </StackPanel></ScrollViewer>
-        <ScrollViewer Grid.Row="2" MinHeight="58" MaxHeight="100" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><TextBlock Text="{Binding Status}" Margin="0,16,0,8" TextWrapping="Wrap"
+        <ScrollViewer Grid.Row="2" MinHeight="58" MaxHeight="100" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><TextBlock x:Name="StatusText" Text="{Binding Status, NotifyOnTargetUpdated=True}" TargetUpdated="StatusTextUpdated" Margin="0,16,0,8" TextWrapping="Wrap"
                    AutomationProperties.LiveSetting="Polite" /></ScrollViewer>
-        <DockPanel Grid.Row="3"><Button DockPanel.Dock="Right" Content="E_xit" Click="ExitApplication" Padding="10,8" Margin="6,0,0,0" ToolTip="Stop FilePilot and release its shortcut" /><Button DockPanel.Dock="Right" Content="C_hoose files…" ToolTip="Choose one or more files (Ctrl+O)" Click="ChooseFile" IsEnabled="{Binding CanChooseFile}" /><TextBlock x:Name="ShortcutHint" Text="ESC TO DISMISS" FontSize="10" VerticalAlignment="Center" Foreground="{DynamicResource MutedBrush}" /></DockPanel>
+        <StackPanel Grid.Row="3"><TextBlock x:Name="ShortcutHint" Text="ESC TO DISMISS" FontSize="10" Foreground="{DynamicResource MutedBrush}" Margin="0,0,0,6" /><DockPanel><Button DockPanel.Dock="Right" Content="E_xit" Click="ExitApplication" Padding="10,8" Margin="6,0,0,0" ToolTip="Stop FilePilot and release its shortcut" /><Button x:Name="ChooseFilesButton" Content="C_hoose files…" ToolTip="Choose one or more files (Ctrl+O)" Click="ChooseFile" IsEnabled="{Binding CanChooseFile}" /></DockPanel></StackPanel>
     </Grid></Border></Window>

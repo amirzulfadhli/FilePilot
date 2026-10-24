@@ -4,13 +4,14 @@ using FilePilot.Core;
 
 namespace FilePilot.App.Diagnostics;
 
-internal sealed record DiagnosticOptions(string ReportPath, bool Widget)
+internal sealed record DiagnosticOptions(string ReportPath, bool Widget, bool Extended = false)
 {
     internal static DiagnosticOptions Parse(string[] args)
     {
-        if (args.Length != 3 || args[0] != "--diagnostics" || args[2] is not ("popup" or "widget"))
-            throw new ArgumentException("Usage: FilePilot --diagnostics <new absolute report.json> popup|widget");
-        return new(ValidateReportPath(args[1]), args[2] == "widget");
+        if (args.Length is not (3 or 4) || args[0] != "--diagnostics" || args[2] is not ("popup" or "widget") ||
+            (args.Length == 4 && args[3] != "--extended"))
+            throw new ArgumentException("Usage: FilePilot --diagnostics <new absolute report.json> popup|widget [--extended]");
+        return new(ValidateReportPath(args[1]), args[2] == "widget", args.Length == 4);
     }
 
     internal static string ValidateReportPath(string path)

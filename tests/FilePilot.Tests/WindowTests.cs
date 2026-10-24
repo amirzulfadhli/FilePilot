@@ -1,8 +1,14 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.ExceptionServices;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Threading;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Automation;
+using System.Windows.Automation.Peers;
 using FilePilot.App;
 using Xunit;
 using Xunit.Abstractions;
@@ -95,7 +101,7 @@ public sealed class WindowTests(ITestOutputHelper output)
             System.IO.File.WriteAllText(fixture, "Metadata-only selection for layout test.");
             try { trace.Run("load image selection", () => ((MainViewModel)window.DataContext).LoadFile(fixture)); }
             finally { System.IO.File.Delete(fixture); }
-            foreach (var theme in new[] { "Light", "Dark" })
+            foreach (var theme in new[] { "Light", "Dark", "HighContrast" })
             {
                 ResourceDictionary resources = null!;
                 trace.Run($"load {theme} resources", () => resources = new ResourceDictionary
@@ -106,6 +112,11 @@ public sealed class WindowTests(ITestOutputHelper output)
                 trace.Run($"{theme} Measure", () => window.Measure(new Size(480, 640)));
                 trace.Run($"{theme} Arrange", () => window.Arrange(new Rect(0, 0, 480, 640)));
             }
+            window.Resources.MergedDictionaries.Clear();
+            trace.Run("theme cache, contrast pairs and templates", () => VerifyThemes(window));
+            window.Configure(false, new());
+            var dismiss = (Button)window.FindName("DismissButton");
+            Assert.Equal("Close popup", AutomationProperties.GetName(dismiss));
             Assert.IsType<MainViewModel>(window.DataContext);
             Assert.Single(window.InputBindings);
             Assert.Single(window.CommandBindings);
@@ -116,6 +127,7 @@ public sealed class WindowTests(ITestOutputHelper output)
             await ShowAndRenderAsync(window, () => window.ShowPopup(), "image ShowPopup", trace);
             Assert.True(window.IsVisible);
             Assert.Equal(640, window.Height);
+            Assert.Same(window.FindName("CopyPathButton"), FocusManager.GetFocusedElement(window));
             trace.Run("minimize", () => window.WindowState = WindowState.Minimized);
             trace.Run("restore ShowPopup", () => window.ShowPopup());
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
@@ -124,6 +136,21 @@ public sealed class WindowTests(ITestOutputHelper output)
             trace.Run("empty ShowPopup", () => window.ShowPopup());
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             Assert.Equal(420, window.Height);
+            Assert.Same(window.FindName("ChooseFilesButton"), FocusManager.GetFocusedElement(window));
+            var status = (TextBlock)window.FindName("StatusText");
+            Assert.Equal(AutomationLiveSetting.Polite, AutomationProperties.GetLiveSetting(status));
+            var peer = UIElementAutomationPeer.CreatePeerForElement(status);
+            Assert.Equal(AutomationLiveSetting.Polite, peer.GetLiveSetting());
+            trace.Run("resident hide and primary focus restore", () =>
+            {
+                window.Configure(true, new());
+                Assert.Equal("Hide popup", AutomationProperties.GetName(dismiss));
+                window.Close();
+                Assert.False(window.IsVisible);
+                window.ShowPopup();
+                Assert.Same(window.FindName("ChooseFilesButton"), FocusManager.GetFocusedElement(window));
+                window.Configure(false, new());
+            });
             var docFixture = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "FilePilot-doc-layout-" + Guid.NewGuid().ToString("N") + ".docx");
             System.IO.File.WriteAllText(docFixture, "Metadata-only document fixture");
             try
@@ -149,11 +176,127 @@ public sealed class WindowTests(ITestOutputHelper output)
             var settingsActions = Assert.IsType<System.Windows.Controls.DockPanel>(settingsFooter.Children[1]);
             Assert.Contains(settingsActions.Children.Cast<System.Windows.UIElement>(), child => child is System.Windows.Controls.Button { IsCancel: true });
             Assert.Contains(settingsActions.Children.Cast<System.Windows.UIElement>(), child => child is System.Windows.Controls.Button { IsDefault: true });
+            await VerifyAvailableMonitorsAsync(window, trace);
+            trace.Run("scaled work-area layout", () => VerifyScaledLayout(window, settings));
         }
         finally
         {
             if (settings is not null) trace.Run("Settings.Close", settings.Close);
             trace.Run("MainWindow.Close", window.Close);
+        }
+    }
+
+    private static async Task VerifyAvailableMonitorsAsync(MainWindow window, Checkpoints trace)
+    {
+        var monitors = new List<nint>();
+        Assert.True(EnumDisplayMonitors(0, 0, (monitor, _, _, _) => { monitors.Add(monitor); return true; }, 0));
+        Assert.NotEmpty(monitors);
+        foreach (var monitor in monitors)
+        {
+            var info = new FilePilot.App.Widget.NativeMethods.MonitorInfo
+            { Size = Marshal.SizeOf<FilePilot.App.Widget.NativeMethods.MonitorInfo>() };
+            Assert.True(FilePilot.App.Widget.NativeMethods.GetMonitorInfo(monitor, ref info));
+            var work = info.Work;
+            trace.Run($"monitor work area {work.Left},{work.Top}..{work.Right},{work.Bottom}", () =>
+                window.ShowPopup(new() { X = work.Right - 1, Y = work.Bottom - 1 }));
+            await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+            Assert.True(GetWindowRect(hwnd, out var bounds));
+            var dpi = FilePilot.App.Widget.NativeMethods.GetDpiForWindow(hwnd);
+            trace.Record($"monitor result: DPI={dpi}, HWND={bounds.Left},{bounds.Top}..{bounds.Right},{bounds.Bottom}");
+            Assert.True(bounds.Left >= work.Left && bounds.Top >= work.Top &&
+                bounds.Right <= work.Right + 1 && bounds.Bottom <= work.Bottom + 1,
+                $"Popup escaped monitor work area at {dpi} DPI.");
+        }
+    }
+
+    private delegate bool MonitorCallback(nint monitor, nint hdc, nint rectangle, nint data);
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumDisplayMonitors(nint hdc, nint clip, MonitorCallback callback, nint data);
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(nint hwnd, out FilePilot.App.Widget.NativeMethods.Rect rectangle);
+
+    private static void VerifyThemes(MainWindow window)
+    {
+        var resources = Application.Current.Resources;
+        var themes = new ThemeResources(resources);
+        themes.Apply(false, false);
+        var light = resources.MergedDictionaries[0];
+        themes.Apply(true, false);
+        var dark = resources.MergedDictionaries[0];
+        var expander = (Expander)window.FindName("RenameExpander");
+        expander.Measure(new Size(300, 120));
+        expander.Arrange(new Rect(0, 0, 300, 120));
+        Assert.Equal(((SolidColorBrush)window.FindResource("TextBrush")).Color,
+            ((SolidColorBrush)expander.Foreground).Color);
+        Assert.Equal(((SolidColorBrush)window.FindResource("TextBrush")).Color,
+            ((SolidColorBrush)VisualChildren<TextBlock>(expander).Single(text => text.Text == "Quick rename").Foreground).Color);
+        themes.Apply(true, true);
+        var contrast = resources.MergedDictionaries[0];
+        Assert.Equal(SystemColors.WindowColor, ((SolidColorBrush)window.FindResource("WindowBrush")).Color);
+        Assert.Equal(SystemColors.WindowTextColor, ((SolidColorBrush)window.FindResource("TextBrush")).Color);
+        Assert.Equal(SystemColors.HighlightColor, ((SolidColorBrush)window.FindResource("HoverBrush")).Color);
+        Assert.Equal(SystemColors.HighlightTextColor, ((SolidColorBrush)window.FindResource("HoverTextBrush")).Color);
+        // Test the actual implicit item template, including the paired selected text brush.
+        var item = new ComboBoxItem { Content = "PNG", IsSelected = true };
+        item.ApplyTemplate();
+        item.Measure(new Size(180, 40));
+        item.Arrange(new Rect(0, 0, 180, 40));
+        Assert.Equal(SystemColors.HighlightTextColor, ((SolidColorBrush)item.Foreground).Color);
+        Assert.Equal(SystemColors.HighlightColor, ((SolidColorBrush)((Border)item.Template.FindName("ItemBorder", item)).Background).Color);
+        Assert.Equal(SystemColors.HighlightTextColor, ((SolidColorBrush)VisualChildren<TextBlock>(item).Single().Foreground).Color);
+        var copy = (Button)window.FindName("CopyPathButton");
+        copy.IsEnabled = false;
+        copy.ApplyTemplate();
+        Assert.Equal(SystemColors.GrayTextColor, ((SolidColorBrush)copy.Foreground).Color);
+        copy.ClearValue(UIElement.IsEnabledProperty);
+        for (int i = 0; i < 100; i++)
+        {
+            themes.Apply(false, false);
+            Assert.Same(light, resources.MergedDictionaries[0]);
+            themes.Apply(true, false);
+            Assert.Same(dark, resources.MergedDictionaries[0]);
+            themes.Apply(false, true);
+            Assert.Same(contrast, resources.MergedDictionaries[0]);
+        }
+        themes.Apply(false, false);
+        Assert.Same(light, resources.MergedDictionaries[0]);
+    }
+
+    private static IEnumerable<T> VisualChildren<T>(DependencyObject root) where T : DependencyObject
+    {
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T match) yield return match;
+            foreach (var descendant in VisualChildren<T>(child)) yield return descendant;
+        }
+    }
+
+    private static void VerifyScaledLayout(MainWindow window, SettingsWindow settings)
+    {
+        // Simulated work-area constraints, not a claim of physical monitor DPI switching.
+        foreach (int physicalWidth in new[] { 960, 640 })
+        foreach (uint dpi in new uint[] { 96, 120, 144, 192 })
+        {
+            var available = FilePilot.App.Widget.PopupPlacement.WorkAreaSize(physicalWidth, 768, dpi);
+            foreach (var target in new Window[] { window, settings })
+            {
+                target.MaxWidth = available.Width;
+                target.MaxHeight = available.Height;
+                target.UpdateLayout();
+                var root = (FrameworkElement)target.Content;
+                Assert.True(root.ActualWidth > 0 && root.ActualHeight > 0);
+                var action = target == window ? (FrameworkElement)window.FindName("ChooseFilesButton")
+                    : ((DockPanel)settings.Content).Children[0] as FrameworkElement;
+                Assert.NotNull(action);
+                var bounds = action.TransformToAncestor(root).TransformBounds(new Rect(action.RenderSize));
+                Assert.True(bounds.Top >= 0 && bounds.Bottom <= root.ActualHeight + 1, $"{target.Title} at {dpi} DPI: footer {bounds}, root {root.RenderSize}");
+                Assert.True(bounds.Left >= 0 && bounds.Right <= root.ActualWidth + 1);
+                Assert.True(target.UseLayoutRounding);
+            }
         }
     }
 

@@ -6,6 +6,8 @@
 - Safe PNG/JPEG/WebP conversion, sequential batches, copy path, move, rename and favorite folders.
 - Optional local LibreOffice DOCX-to-PDF export with bounded preflight, property minimization, cancellation and no-overwrite finalization.
 - Light/dark themes, keyboard actions, visible Settings controls and minimized-window recovery.
+- Primary-action focus, Windows high-contrast palette precedence, paired selection colors, live-region status events and whole-DIP work-area sizing.
+- Cached palettes and opt-in extended popup/Settings/hidden-idle measurements; CI checks extracted-package startup, memory and native compatibility.
 - Per-user classic Explorer verbs for images/DOCX and packaged installation, version switching, rollback and guarded uninstall tools.
 - Windows CI for Release builds, automated tests, candidate package integrity and deployment lifecycle checks; separate real-renderer acceptance.
 

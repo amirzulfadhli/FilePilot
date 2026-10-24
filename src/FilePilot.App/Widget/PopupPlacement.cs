@@ -6,6 +6,12 @@ namespace FilePilot.App.Widget;
 
 internal static class PopupPlacement
 {
+    internal static Size WorkAreaSize(int width, int height, uint dpi)
+    {
+        double scale = Math.Max(96, dpi) / 96d;
+        // Whole DIPs avoid rounding the last physical pixel outside a fractional-DPI work area.
+        return new Size(Math.Max(200, Math.Floor(width / scale)), Math.Max(120, Math.Floor(height / scale)));
+    }
     internal static (int X, int Y) Clamp(int x, int y, int width, int height, int left, int top, int right, int bottom) =>
         (Math.Clamp(x, left, Math.Max(left, right - width)), Math.Clamp(y, top, Math.Max(top, bottom - height)));
 
@@ -21,8 +27,9 @@ internal static class PopupPlacement
         // Move the HWND onto the target monitor first so its per-monitor DPI can update.
         NativeMethods.SetWindowPos(hwnd, 0, cursor.X, cursor.Y, 0, 0, 0x0015);
         double scale = Math.Max(96, NativeMethods.GetDpiForWindow(hwnd)) / 96d;
-        window.MaxHeight = Math.Max(120, (info.Work.Bottom - info.Work.Top) / scale);
-        window.MaxWidth = Math.Max(200, (info.Work.Right - info.Work.Left) / scale);
+        var available = WorkAreaSize(info.Work.Right - info.Work.Left, info.Work.Bottom - info.Work.Top, NativeMethods.GetDpiForWindow(hwnd));
+        window.MaxHeight = available.Height;
+        window.MaxWidth = available.Width;
         if (window.DataContext is MainViewModel model) window.SetCurrentValue(Window.HeightProperty, model.WindowHeight);
         window.UpdateLayout();
         int width = (int)Math.Ceiling(Math.Min(window.Width, window.MaxWidth) * scale);

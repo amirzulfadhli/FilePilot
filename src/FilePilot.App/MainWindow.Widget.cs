@@ -28,12 +28,16 @@ public partial class MainWindow
         darkTheme = settings.DarkTheme;
         ApplyTheme();
         ShortcutHint.Text = resident ? settings.Shortcut + " · ESC TO HIDE" : "ESC TO CLOSE";
+        System.Windows.Automation.AutomationProperties.SetName(DismissButton, resident ? "Hide popup" : "Close popup");
+        DismissButton.ToolTip = resident ? "Hide (Escape)" : "Close (Escape)";
     }
     private void ApplyTheme()
     {
-        Application.Current.Resources.MergedDictionaries[0] = new ResourceDictionary
-        { Source = new Uri($"Themes/{(darkTheme ? "Dark" : "Light")}.xaml", UriKind.Relative) };
-        ThemeButton.Content = darkTheme ? "_Light" : "_Dark";
+        var highContrast = SystemParameters.HighContrast;
+        themeResources.Apply(darkTheme, highContrast);
+        ThemeButton.Content = highContrast ? "Contrast" : darkTheme ? "_Light" : "_Dark";
+        ThemeButton.IsEnabled = !highContrast;
+        ThemeButton.ToolTip = highContrast ? "Windows high contrast is active. Your light/dark preference is preserved." : "Switch light/dark theme";
     }
     internal void ShowPopup(NativeMethods.Point? cursor = null)
     {
@@ -43,7 +47,8 @@ public partial class MainWindow
         Show();
         Activate();
         PopupPlacement.Place(this, cursor);
-        MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+        if (Model.CopyPathCommand.CanExecute(null)) CopyPathButton.Focus();
+        else if (Model.CanChooseFile) ChooseFilesButton.Focus();
     }
     internal void ExitWidget()
     {

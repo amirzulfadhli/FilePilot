@@ -36,17 +36,29 @@ internal static class DiagnosticRunner
         window.Hide();
         var idleClock = Stopwatch.StartNew();
         var cpuStart = process.TotalProcessorTime;
-        await Task.Delay(3000);
+        await Task.Delay(options.Extended ? 30000 : 3000);
         process.Refresh();
         var idleCpuMs = (process.TotalProcessorTime - cpuStart).TotalMilliseconds;
         var idleWallMs = idleClock.Elapsed.TotalMilliseconds;
         var hidden = MemorySnapshot.Capture();
-        const int cycles = 20;
+        int cycles = options.Extended ? 100 : 20;
         for (int i = 0; i < cycles; i++)
         {
             window.ShowPopup();
             await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ContextIdle);
             window.Hide();
+        }
+        int settingsCycles = options.Extended ? 10 : 0;
+        for (int i = 0; i < settingsCycles; i++)
+        {
+            // Synthetic settings only: never save preferences or register a new shortcut.
+            var settings = new SettingsWindow(new(), _ => { }) { Owner = window, IsEnabled = false };
+            try
+            {
+                settings.Show();
+                await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ContextIdle);
+            }
+            finally { settings.Close(); }
         }
         await Task.Delay(2000);
         var afterCycles = MemorySnapshot.Capture();
@@ -70,6 +82,8 @@ internal static class DiagnosticRunner
             IdleCpuMilliseconds = idleCpuMs,
             IdleWallMilliseconds = idleWallMs,
             PopupCycles = cycles,
+            SettingsCycles = settingsCycles,
+            Extended = options.Extended,
             AfterPopupCycles = afterCycles,
             AfterCodec = afterCodec,
             NativeApisAvailable = nativeApis,

@@ -3,6 +3,7 @@
 param(
     [Parameter(Mandatory)][string]$ExecutablePath,
     [ValidateRange(1, 10)][int]$Runs = 3,
+    [switch]$Extended,
     [ValidateRange(1, 60000)][double]$MaxStartupMilliseconds = 5000,
     [ValidateRange(1, 4096)][double]$MaxIdlePrivateMiB = 200,
     [ValidateRange(1, 4096)][double]$MaxPopupGrowthMiB = 32
@@ -32,9 +33,10 @@ foreach ($mode in @('popup', 'widget')) {
         $start.UseShellExecute = $false
         $start.CreateNoWindow = $true
         foreach ($argument in @('--diagnostics', $path, $mode)) { $start.ArgumentList.Add($argument) }
+        if ($Extended) { $start.ArgumentList.Add('--extended') }
         $process = [Diagnostics.Process]::Start($start)
         try {
-            if (-not $process.WaitForExit(30000)) {
+            if (-not $process.WaitForExit($(if ($Extended) { 90000 } else { 30000 }))) {
                 # Only this explicit synthetic diagnostic process is terminated on timeout.
                 $process.Kill($true)
                 $process.WaitForExit(5000) | Out-Null
@@ -48,6 +50,9 @@ foreach ($mode in @('popup', 'widget')) {
         finally { $process.Dispose() }
         $report = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -AsHashtable
         if (-not $report['Succeeded'] -or $report['Mode'] -ne $mode -or -not $report['NativeApisAvailable'] -or
+            $report['Extended'] -ne $Extended.IsPresent -or
+            $report['PopupCycles'] -ne $(if ($Extended) { 100 } else { 20 }) -or
+            $report['SettingsCycles'] -ne $(if ($Extended) { 10 } else { 0 }) -or
             $report['WindowsBuild'] -lt 14393 -or $report['Architecture'] -ne 'X64' -or
             -not $report['CodecSmoke']['OriginalPreserved'] -or -not $report['CodecSmoke']['CollisionRefused']) {
             throw "Unexpected compatibility/diagnostic result in $path"
@@ -77,7 +82,7 @@ foreach ($mode in @('popup', 'widget')) {
     if (($growth | Measure-Object -Maximum).Maximum -gt $MaxPopupGrowthMiB) { $violations += "$mode popup memory growth exceeded $MaxPopupGrowthMiB MiB" }
 }
 $summaryPath = Join-Path $output 'summary.json'
-$summary = [ordered]@{ SchemaVersion = 1; ExecutableSha256 = $beforeHash; ManagedAssemblySha256 = $assemblyHash; WindowsBuild = $reports[0]['WindowsBuild']
+$summary = [ordered]@{ SchemaVersion = 1; Extended = $Extended.IsPresent; ExecutableSha256 = $beforeHash; ManagedAssemblySha256 = $assemblyHash; WindowsBuild = $reports[0]['WindowsBuild']
     Framework = $reports[0]['Framework']; CreatedUtc = [DateTime]::UtcNow.ToString('O'); Summaries = $summaries
     Budgets = @{ MaxStartupMilliseconds = $MaxStartupMilliseconds; MaxIdlePrivateMiB = $MaxIdlePrivateMiB; MaxPopupGrowthMiB = $MaxPopupGrowthMiB }
     Violations = $violations; Passed = ($violations.Count -eq 0) }

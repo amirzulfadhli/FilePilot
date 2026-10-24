@@ -7,5 +7,7 @@
     <SolidColorBrush x:Key="BorderBrush" Color="#546174" />
     <SolidColorBrush x:Key="AccentBrush" Color="#96BFFF" />
     <SolidColorBrush x:Key="HoverBrush" Color="#36465C" />
+    <SolidColorBrush x:Key="HoverTextBrush" Color="#F1F4F8" />
+    <SolidColorBrush x:Key="DisabledTextBrush" Color="#BCC7D6" />
 </ResourceDictionary>
 

@@ -21,6 +21,18 @@ public sealed class DiagnosticTests : IDisposable
         var options = DiagnosticOptions.Parse(["--diagnostics", path, mode]);
         Assert.Equal(path, options.ReportPath);
         Assert.Equal(widget, options.Widget);
+        Assert.False(options.Extended);
+        Assert.False(File.Exists(path));
+    }
+    [Theory]
+    [InlineData("popup")]
+    [InlineData("widget")]
+    public void ExtendedWorkloadRequiresExplicitFlag(string mode)
+    {
+        var path = Path.Combine(root, "extended.json");
+        Assert.True(DiagnosticOptions.Parse(["--diagnostics", path, mode, "--extended"]).Extended);
+        Assert.Throws<ArgumentException>(() => DiagnosticOptions.Parse(["--diagnostics", path, mode, "--unknown"]));
+        Assert.Throws<ArgumentException>(() => DiagnosticOptions.Parse(["--diagnostics", path, mode, "--extended", "extra"]));
         Assert.False(File.Exists(path));
     }
     [Fact]
