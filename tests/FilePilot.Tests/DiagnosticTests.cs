@@ -22,6 +22,7 @@ public sealed class DiagnosticTests : IDisposable
         Assert.Equal(path, options.ReportPath);
         Assert.Equal(widget, options.Widget);
         Assert.False(options.Extended);
+        Assert.Equal(3, options.RequestedIdleSeconds);
         Assert.False(File.Exists(path));
     }
     [Theory]
@@ -31,9 +32,36 @@ public sealed class DiagnosticTests : IDisposable
     {
         var path = Path.Combine(root, "extended.json");
         Assert.True(DiagnosticOptions.Parse(["--diagnostics", path, mode, "--extended"]).Extended);
+        Assert.Equal(30, DiagnosticOptions.Parse(["--diagnostics", path, mode, "--extended"]).RequestedIdleSeconds);
         Assert.Throws<ArgumentException>(() => DiagnosticOptions.Parse(["--diagnostics", path, mode, "--unknown"]));
         Assert.Throws<ArgumentException>(() => DiagnosticOptions.Parse(["--diagnostics", path, mode, "--extended", "extra"]));
         Assert.False(File.Exists(path));
+    }
+    [Theory]
+    [InlineData("popup", 30)][InlineData("widget", 30)]
+    [InlineData("popup", 300)][InlineData("widget", 300)]
+    [InlineData("popup", 3600)][InlineData("widget", 3600)]
+    public void LongerIdleRequiresAnExplicitBoundedDiagnosticInterval(string mode, int seconds)
+    {
+        var path = Path.Combine(root, "longer.json");
+        var options = DiagnosticOptions.Parse(["--diagnostics", path, mode, "--extended", "--idle-seconds", seconds.ToString(System.Globalization.CultureInfo.InvariantCulture)]);
+        Assert.True(options.Extended);
+        Assert.Equal(seconds, options.RequestedIdleSeconds);
+        Assert.False(File.Exists(path));
+    }
+    [Theory]
+    [InlineData("0")][InlineData("29")][InlineData("3601")][InlineData("-30")]
+    [InlineData("+30")][InlineData("30.5")][InlineData(" 30")][InlineData("9999999999")]
+    public void InvalidIdleIntervalsAreRejectedBeforeCreatingReports(string seconds)
+    {
+        var path = Path.Combine(root, "invalid-idle.json");
+        Assert.Throws<ArgumentException>(() => DiagnosticOptions.Parse(["--diagnostics", path, "widget", "--extended", "--idle-seconds", seconds]));
+        Assert.False(File.Exists(path));
+    }
+    [Fact]
+    public void LongerIdleCannotBeEnabledByAnOrdinaryDiagnosticLaunch()
+    {
+        Assert.Throws<ArgumentException>(() => DiagnosticOptions.Parse(["--diagnostics", Path.Combine(root, "idle.json"), "widget", "--idle-seconds", "300"]));
     }
     [Fact]
     public void RejectsMalformedUnsafeAndOccupiedReports()

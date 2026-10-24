@@ -20,6 +20,8 @@ internal sealed record MemorySnapshot(long WorkingSetBytes, long PrivateBytes, l
     }
 }
 
+internal sealed record IdleMemorySample(double ElapsedMilliseconds, MemorySnapshot Memory);
+
 /// <summary>Explicit, local-only diagnostic workload. Normal launches never instantiate this runner.</summary>
 internal static class DiagnosticRunner
 {
@@ -36,11 +38,18 @@ internal static class DiagnosticRunner
         window.Hide();
         var idleClock = Stopwatch.StartNew();
         var cpuStart = process.TotalProcessorTime;
-        await Task.Delay(options.Extended ? 30000 : 3000);
+        var idleSamples = new List<IdleMemorySample>();
+        for (int waited = 0; waited < options.RequestedIdleSeconds;)
+        {
+            int interval = Math.Min(10, options.RequestedIdleSeconds - waited);
+            await Task.Delay(TimeSpan.FromSeconds(interval));
+            waited += interval;
+            idleSamples.Add(new(idleClock.Elapsed.TotalMilliseconds, MemorySnapshot.Capture()));
+        }
         process.Refresh();
         var idleCpuMs = (process.TotalProcessorTime - cpuStart).TotalMilliseconds;
         var idleWallMs = idleClock.Elapsed.TotalMilliseconds;
-        var hidden = MemorySnapshot.Capture();
+        var hidden = idleSamples[^1].Memory;
         int cycles = options.Extended ? 100 : 20;
         for (int i = 0; i < cycles; i++)
         {
@@ -81,6 +90,8 @@ internal static class DiagnosticRunner
             HiddenIdle = hidden,
             IdleCpuMilliseconds = idleCpuMs,
             IdleWallMilliseconds = idleWallMs,
+            RequestedIdleSeconds = options.RequestedIdleSeconds,
+            IdleSamples = idleSamples,
             PopupCycles = cycles,
             SettingsCycles = settingsCycles,
             Extended = options.Extended,

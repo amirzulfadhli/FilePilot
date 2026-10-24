@@ -75,7 +75,8 @@ jobs:
          github.ref == 'refs/heads/feature/phase-7-beta-ci' ||
          github.ref == 'refs/heads/codex/phase-8-stabilization' ||
          github.ref == 'refs/heads/codex/phase-9-release-readiness' ||
-         github.ref == 'refs/heads/codex/phase-10-beta-distribution'))
+         github.ref == 'refs/heads/codex/phase-10-beta-distribution' ||
+         github.ref == 'refs/heads/codex/phase-11-beta-acceptance'))
     runs-on: windows-2025
     timeout-minutes: 25
     steps:
