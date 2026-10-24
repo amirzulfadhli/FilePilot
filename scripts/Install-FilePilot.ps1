@@ -2,7 +2,8 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [Parameter(Mandatory)][string]$PackagePath,
-    [string]$InstallDirectory = (Join-Path $env:LOCALAPPDATA ('Programs/FilePilot/' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0, 8)))
+    [string]$InstallDirectory = (Join-Path $env:LOCALAPPDATA ('Programs/FilePilot/' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))),
+    [ValidatePattern('\A[0-9a-fA-F]{64}\z')][string]$ExpectedSHA256
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -28,6 +29,12 @@ $archive = (Get-Item -LiteralPath $PackagePath).FullName
 # Prevent ordinary archive replacement between validation and extraction.
 $stream = [IO.File]::Open($archive, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
 try {
+    if ($stream.Length -gt 512MB) { throw 'Package exceeds the 512 MiB archive limit.' }
+    $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($stream))
+    if ($ExpectedSHA256 -and -not $hash.Equals($ExpectedSHA256, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Package SHA-256 does not match the expected checksum. No installation was created.'
+    }
+    $stream.Position = 0
     & (Join-Path $PSScriptRoot 'Test-Package.ps1') -Path $archive | Out-Host
     $zip = [IO.Compression.ZipArchive]::new($stream, [IO.Compression.ZipArchiveMode]::Read, $true)
     try {
@@ -54,13 +61,11 @@ try {
         }
         # Validate prerequisites even in preview; keep every installation write behind this guard.
         if (-not $PSCmdlet.ShouldProcess($destination, 'Install verified FilePilot into a new directory')) {
-            return [pscustomobject]@{ Installed = $false; Preview = $true; Directory = $destination; Executable = (Join-Path $destination 'FilePilot.exe'); SourceRevision = $manifest.SourceRevision; SourceDirty = $manifest.SourceDirty }
+            return [pscustomobject]@{ Installed = $false; Preview = $true; Directory = $destination; Executable = (Join-Path $destination 'FilePilot.exe'); SourceRevision = $manifest.SourceRevision; SourceDirty = $manifest.SourceDirty; PackageSHA256 = $hash }
         }
         # This operation only creates a fresh tree. Failed/partial installs are retained for inspection.
         [IO.Directory]::CreateDirectory($destination) | Out-Null
         [IO.Compression.ZipFileExtensions]::ExtractToDirectory($zip, $destination)
-        $stream.Position = 0
-        $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($stream))
         $receipt = @{ SchemaVersion = 1; SourceRevision = $manifest.SourceRevision; SourceDirty = $manifest.SourceDirty; PackageSHA256 = $hash; InstalledUtc = [DateTime]::UtcNow.ToString('O') }
         $receiptFile = [IO.File]::Open((Join-Path $destination 'filepilot-installation.json'), [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
         try { $bytes = [Text.Encoding]::UTF8.GetBytes(($receipt | ConvertTo-Json)); $receiptFile.Write($bytes); $receiptFile.Flush($true) } finally { $receiptFile.Dispose() }
@@ -68,4 +73,4 @@ try {
     finally { $zip.Dispose() }
 }
 finally { $stream.Dispose() }
-[pscustomobject]@{ Installed = $true; Directory = $destination; Executable = (Join-Path $destination 'FilePilot.exe'); SourceRevision = $manifest.SourceRevision; SourceDirty = $manifest.SourceDirty }
+[pscustomobject]@{ Installed = $true; Directory = $destination; Executable = (Join-Path $destination 'FilePilot.exe'); SourceRevision = $manifest.SourceRevision; SourceDirty = $manifest.SourceDirty; PackageSHA256 = $hash }

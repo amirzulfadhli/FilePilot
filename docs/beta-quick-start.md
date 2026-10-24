@@ -32,11 +32,14 @@ Conversions preserve originals and refuse occupied output names. Native image ba
 
 From the unpacked candidate, preview a new destination, then install it. The preview validates the package, path and installed runtime but creates no installation folders or receipt. It does not predict future disk space, permissions or file-lock changes. A preview reports `Installed=False`; check that the real installation reports `Installed=True` before activation.
 
+Replace the checksum placeholder below with the trusted maintainer-provided 64-hex SHA-256. The optional ExpectedSHA256 parameter enforces that value against the held archive before extraction, in both preview and installation. Do not derive the expected value from an untrusted archive itself. The result and installation receipt expose PackageSHA256 for later comparison. Omitting the parameter retains inventory/hash validation but does not bind it to a trusted external checksum.
+
 ```powershell
 $archive = 'C:\Downloads\FilePilot-win-x64.zip'
+$expected = 'PASTE_TRUSTED_64_HEX_SHA256_HERE'
 $destination = Join-Path $env:LOCALAPPDATA 'Programs/FilePilot/beta-check-1'
-& .\deployment\Install-FilePilot.ps1 -PackagePath $archive -InstallDirectory $destination -WhatIf
-$installed = & .\deployment\Install-FilePilot.ps1 -PackagePath $archive -InstallDirectory $destination
+& .\deployment\Install-FilePilot.ps1 -PackagePath $archive -InstallDirectory $destination -ExpectedSHA256 $expected -WhatIf
+$installed = & .\deployment\Install-FilePilot.ps1 -PackagePath $archive -InstallDirectory $destination -ExpectedSHA256 $expected
 $installed | Format-List
 ```
 

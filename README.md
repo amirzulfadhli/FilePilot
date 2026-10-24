@@ -223,7 +223,7 @@ Unverified Phase 3 desktop flows: full favorite-folder picker/add/remove/move in
 8. Phase 8 — primary-action keyboard focus, Windows high-contrast resources, readable selection/disabled controls, live-region notifications, rounded DPI layout and cached themes. Explicit diagnostics can exercise 100 popup and 10 Settings cycles. See [Phase 8 implementation and evidence](docs/phase-8-stabilization.md) and the [acceptance plan](docs/phase-8-preparation.md). Windows 10 and broad hardware/assistive-technology acceptance remain unverified; no release is approved.
 
 9. Phase 9 — offline quick-start help, keyboard recovery of hidden conversions, real Explorer/picker/help/native-cancellation interaction checks, visible dark-mode help focus, routed modal acceptance and transient document cleanup-lock handling. Safely integrated into main at d346d50 after both required CI jobs passed, with 172 real-engine tests and no skips. See [Phase 9 readiness and remaining release gates](docs/phase-9-release-readiness.md).
-10. Phase 10 — beta distribution preparation on codex/phase-10-beta-distribution: validated installation preview and a packaged setup/upgrade/removal guide. See [Phase 10 evidence and remaining gates](docs/phase-10-beta-distribution.md). No public release is approved.
+10. Phase 10 — beta distribution preparation on codex/phase-10-beta-distribution: validated installation preview, optional trusted archive-checksum enforcement, cleanup stability and a packaged setup/upgrade/removal guide. See [Phase 10 evidence and remaining gates](docs/phase-10-beta-distribution.md). No public release is approved.
 
 Windows 10 and broad hardware/accessibility acceptance remain unverified release limitations, not inferred from Windows 11 test results.
 
