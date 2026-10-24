@@ -1,5 +1,5 @@
 #requires -Version 7.2
-[CmdletBinding()]
+[CmdletBinding(SupportsShouldProcess)]
 param(
     [Parameter(Mandatory)][string]$PackagePath,
     [string]$InstallDirectory = (Join-Path $env:LOCALAPPDATA ('Programs/FilePilot/' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0, 8)))
@@ -51,6 +51,10 @@ try {
             finally { $hostReader.Dispose() }
             $runtimes = & $dotnet.Source --list-runtimes
             if ($LASTEXITCODE -ne 0 -or -not ($runtimes -match '^Microsoft\.WindowsDesktop\.App 10\.0\.\d+ ')) { throw 'Install the .NET 10 Windows Desktop Runtime (x64), then retry.' }
+        }
+        # Validate prerequisites even in preview; keep every installation write behind this guard.
+        if (-not $PSCmdlet.ShouldProcess($destination, 'Install verified FilePilot into a new directory')) {
+            return [pscustomobject]@{ Installed = $false; Preview = $true; Directory = $destination; Executable = (Join-Path $destination 'FilePilot.exe'); SourceRevision = $manifest.SourceRevision; SourceDirty = $manifest.SourceDirty }
         }
         # This operation only creates a fresh tree. Failed/partial installs are retained for inspection.
         [IO.Directory]::CreateDirectory($destination) | Out-Null

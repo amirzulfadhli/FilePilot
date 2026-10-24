@@ -18,10 +18,13 @@ $manifest = Get-Content -LiteralPath (Join-Path $destination 'package-manifest.j
 foreach ($file in $manifest.Files) {
     if ((Get-FileHash -LiteralPath (Join-Path $destination $file.Path)).Hash -ne $file.Sha256) { throw "Installed payload mismatch: $($file.Path)" }
 }
+# Initial installation exercises the source tool; refusal/preview cases exercise the delivered copy.
+$installer = Join-Path $destination 'deployment/Install-FilePilot.ps1'
 $passed = 1
-function Assert-Refused([string]$Target, [string]$Archive = $package) {
+function Assert-Refused([string]$Target, [string]$Archive = $package, [switch]$Preview) {
     $refused = $false
-    try { & $installer -PackagePath $Archive -InstallDirectory $Target | Out-Null }
+    $arguments = @{ PackagePath = $Archive; InstallDirectory = $Target; WhatIf = $Preview.IsPresent }
+    try { & $installer @arguments | Out-Null }
     catch { $refused = $true }
     if (-not $refused) { throw "Unsafe install was accepted: $Target" }
     $script:passed++
@@ -40,4 +43,15 @@ $corrupt = Join-Path $root 'corrupt.zip'
 $refusedDirectory = Join-Path $root 'invalid-package'
 Assert-Refused $refusedDirectory $corrupt
 if (Test-Path -LiteralPath $refusedDirectory) { throw 'Invalid archive created an installation directory.' }
+$previewParent = Join-Path $root 'preview parent'
+$previewDestination = Join-Path $previewParent 'version 文'
+$preview = & $installer -PackagePath $package -InstallDirectory $previewDestination -WhatIf
+if ($preview.Installed -or -not $preview.Preview -or $preview.Directory -ine $previewDestination -or
+    $preview.SourceRevision -cne $manifest.SourceRevision -or $preview.SourceDirty -ne $manifest.SourceDirty -or
+    (Test-Path -LiteralPath $previewParent)) { throw 'Preview changed the filesystem or returned incorrect provenance.' }
+$passed++
+Assert-Refused $destination -Preview
+if ([IO.File]::ReadAllText($sentinel) -cne 'Preserve existing work') { throw 'Preview modified an existing installation.' }
+Assert-Refused $refusedDirectory $corrupt -Preview
+if (Test-Path -LiteralPath $refusedDirectory) { throw 'Preview created a directory for an invalid archive.' }
 [pscustomobject]@{ Passed = $passed; Failed = 0; InstalledExecutable = $result.Executable; Fixtures = $root }
