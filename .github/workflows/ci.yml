@@ -141,11 +141,18 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - name: Publish matching diagnostic executable
+        id: publish
         shell: pwsh
         run: |
           dotnet publish src/FilePilot.App -c Release -r win-x64 --self-contained false -o artifacts/cloud-publish
           if ($LASTEXITCODE -ne 0) { throw 'Diagnostic publish failed.' }
+      - name: Short extended control with the same cycle counts and budgets
+        shell: pwsh
+        env:
+          FILEPILOT_DIAGNOSTIC_MODE: ${{ matrix.mode }}
+        run: ./scripts/Measure-FilePilot.ps1 -ExecutablePath artifacts/cloud-publish/FilePilot.exe -Runs 1 -Mode $env:FILEPILOT_DIAGNOSTIC_MODE -Extended -IdleSeconds 30
       - name: Preserve existing performance limits through the full idle and cycle workload
+        if: ${{ !cancelled() && steps.publish.outcome == 'success' }}
         shell: pwsh
         env:
           FILEPILOT_DIAGNOSTIC_MODE: ${{ matrix.mode }}

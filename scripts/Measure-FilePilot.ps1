@@ -72,6 +72,14 @@ foreach ($diagnosticMode in $diagnosticModes) {
             throw "Unexpected compatibility/diagnostic result in $path"
         }
         $reports += $report
+        if ($report.ContainsKey('Checkpoints')) {
+            foreach ($checkpoint in $report['Checkpoints']) {
+                $memory = $checkpoint['Memory']
+                Write-Host ("checkpoint {0}/{1}/{2}: private={3:N3} MiB managed={4:N3} MiB lastGCCommitted={5:N3} MiB allocated={6:N3} MiB handles={7} GDI={8} USER={9} windows={10}/{11} GC={12}/{13}/{14}" -f
+                    $diagnosticMode, $checkpoint['Phase'], $checkpoint['Cycle'], ($memory['PrivateBytes'] / 1MB), ($memory['ManagedBytes'] / 1MB), ($memory['GcCommittedBytes'] / 1MB), ($memory['AllocatedBytes'] / 1MB),
+                    $memory['Handles'], $memory['GdiObjects'], $memory['UserObjects'], $checkpoint['Windows'], $checkpoint['OwnedWindows'], $memory['Gen0Collections'], $memory['Gen1Collections'], $memory['Gen2Collections'])
+            }
+        }
         Write-Host ("{0} run {1}: first frame {2:N0} ms, hidden private {3:N1} MiB, idle CPU {4:N1} ms" -f
             $diagnosticMode, $run, $report['ProcessStartToContentRenderedMilliseconds'], ($report['HiddenIdle']['PrivateBytes'] / 1MB), $report['IdleCpuMilliseconds'])
     }
