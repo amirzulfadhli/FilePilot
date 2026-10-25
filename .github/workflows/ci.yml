@@ -76,7 +76,8 @@ jobs:
          github.ref == 'refs/heads/codex/phase-8-stabilization' ||
          github.ref == 'refs/heads/codex/phase-9-release-readiness' ||
          github.ref == 'refs/heads/codex/phase-10-beta-distribution' ||
-         github.ref == 'refs/heads/codex/phase-11-beta-acceptance'))
+         github.ref == 'refs/heads/codex/phase-11-beta-acceptance' ||
+         github.ref == 'refs/heads/codex/phase-11-cloud-baseline'))
     runs-on: windows-2025
     timeout-minutes: 25
     steps:
@@ -196,4 +197,48 @@ jobs:
           name: FilePilot-cloud-shell-${{ github.sha }}
           path: artifacts/shell-acceptance/**/*.json
           if-no-files-found: warn
+          retention-days: 7
+
+  historical_baseline:
+    name: Original-source 30-minute ${{ matrix.mode }} control
+    needs: build
+    if: github.ref == 'refs/heads/codex/phase-11-cloud-baseline'
+    runs-on: windows-2025
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [popup, widget]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: candidate
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: 842847154b0357e0e6abae5220f6bb593b09fe32
+          path: baseline
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Verify and publish the unchanged pre-investigation source
+        shell: pwsh
+        run: |
+          if ((git -C baseline rev-parse HEAD).Trim() -cne '842847154b0357e0e6abae5220f6bb593b09fe32') { throw 'Baseline source mismatch.' }
+          if (@(git -C baseline status --porcelain).Count) { throw 'Baseline source must remain unchanged.' }
+          dotnet publish baseline/src/FilePilot.App -c Release -r win-x64 --self-contained false -o baseline/artifacts/publish
+          if ($LASTEXITCODE -ne 0) { throw 'Baseline publish failed.' }
+      - name: Run the original binary with unchanged measurement budgets
+        shell: pwsh
+        env:
+          FILEPILOT_DIAGNOSTIC_MODE: ${{ matrix.mode }}
+        run: ./candidate/scripts/Measure-FilePilot.ps1 -ExecutablePath baseline/artifacts/publish/FilePilot.exe -Runs 1 -Mode $env:FILEPILOT_DIAGNOSTIC_MODE -Extended -IdleSeconds 1800
+      - name: Retain historical-source measurements including failures
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: FilePilot-original-${{ matrix.mode }}-${{ github.sha }}
+          path: candidate/artifacts/performance/*/*.json
+          if-no-files-found: error
           retention-days: 7
