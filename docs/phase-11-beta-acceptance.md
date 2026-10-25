@@ -1,5 +1,7 @@
 # Phase 11 — real-world beta acceptance
 
+The [2026-10-25 acceptance results](phase-11-acceptance-results.md) record the subsequent 189-test verification, interactive checks, unresolved Explorer-menu visibility failure and failed resident memory-growth budget after the requested hour-long workload. These failures block integration; the initial passing short-run results below are retained as dated evidence rather than relabeled as final acceptance.
+
 Phase 10 was integrated on 2026-10-25 by fast-forwarding main from d346d500f4287e0a554105f67468cda8945d08e1 to 84913cd462b7b91330b8768b6bd12b3b5392af66 after both jobs in [run 40123696277](https://github.com/amirzulfadhli/FilePilot/actions/runs/40123696277) passed. Both jobs in the [post-merge main run 40124247627](https://github.com/amirzulfadhli/FilePilot/actions/runs/40124247627) also passed. No force push, history replacement or release publication was used.
 
 Downloaded Phase 10 branch reports confirm 173 real-engine tests passed without skips, both sets of 15 desktop/memory checks passed, and independent PDF inspection succeeded. Build/package, 24 package/script, 16 installer, 21 lifecycle and extracted-widget checks passed. The clean branch archive has 25 payloads, source 84913cd462b7b91330b8768b6bd12b3b5392af66, SourceDirty=false and SHA-256 6861C5AC0F0BF5D8BCE95F99F39032140E551E922732C521B6306EF2603CCFE3. That checksum identifies that artifact only, not a later Phase 11 or separately packaged main build.
