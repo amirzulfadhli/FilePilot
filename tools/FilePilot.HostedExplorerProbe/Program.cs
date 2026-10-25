@@ -230,7 +230,7 @@ internal static class Program
     private static object ObserveUI(AutomationElement explorer)
     {
         var windows = new List<object>();
-        foreach (AutomationElement window in AutomationElement.RootElement.FindAll(TreeScope.Children, Condition.TrueCondition))
+        foreach (AutomationElement window in AutomationElement.RootElement.FindAll(TreeScope.Children, System.Windows.Automation.Condition.TrueCondition))
         {
             var info = window.Current;
             if (info.ProcessId != explorer.Current.ProcessId && info.ClassName != "#32768" &&
