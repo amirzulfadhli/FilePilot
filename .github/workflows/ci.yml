@@ -122,3 +122,71 @@ jobs:
             artifacts/document-acceptance/ci/**/page-*.png
           if-no-files-found: warn
           retention-days: 7
+
+  cloud_stability:
+    name: Hosted 30-minute ${{ matrix.mode }} stability
+    needs: build
+    if: github.ref == 'refs/heads/codex/phase-11-beta-acceptance'
+    runs-on: windows-2025
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [popup, widget]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Publish matching diagnostic executable
+        shell: pwsh
+        run: |
+          dotnet publish src/FilePilot.App -c Release -r win-x64 --self-contained false -o artifacts/cloud-publish
+          if ($LASTEXITCODE -ne 0) { throw 'Diagnostic publish failed.' }
+      - name: Preserve existing performance limits through the full idle and cycle workload
+        shell: pwsh
+        env:
+          FILEPILOT_DIAGNOSTIC_MODE: ${{ matrix.mode }}
+        run: ./scripts/Measure-FilePilot.ps1 -ExecutablePath artifacts/cloud-publish/FilePilot.exe -Runs 1 -Mode $env:FILEPILOT_DIAGNOSTIC_MODE -Extended -IdleSeconds 1800
+      - name: Retain all measurement evidence including failed budgets
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: FilePilot-cloud-${{ matrix.mode }}-${{ github.sha }}
+          path: artifacts/performance/*/*.json
+          if-no-files-found: error
+          retention-days: 7
+
+  cloud_shell:
+    name: Hosted native Shell menu acceptance
+    needs: build
+    if: github.ref == 'refs/heads/codex/phase-11-beta-acceptance'
+    runs-on: windows-2025
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Publish matching app under a Unicode and spaced path
+        shell: pwsh
+        run: |
+          dotnet publish src/FilePilot.App -c Release -r win-x64 --self-contained false -o 'artifacts/cloud shell 文 publish'
+          if ($LASTEXITCODE -ne 0) { throw 'Shell probe publish failed.' }
+      - name: Enumerate the native classic menu on this disposable hosted VM
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -STA -File scripts/Test-HostedShellMenu.ps1 -ExecutablePath 'artifacts/cloud shell 文 publish/FilePilot.exe'
+          if ($LASTEXITCODE -ne 0) { throw 'Native Shell menu acceptance failed.' }
+      - name: Retain native menu evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: FilePilot-cloud-shell-${{ github.sha }}
+          path: artifacts/shell-acceptance/**/*.json
+          if-no-files-found: warn
+          retention-days: 7

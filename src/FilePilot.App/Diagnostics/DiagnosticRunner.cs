@@ -12,11 +12,31 @@ namespace FilePilot.App.Diagnostics;
 
 internal sealed record MemorySnapshot(long WorkingSetBytes, long PrivateBytes, long ManagedBytes, long PeakWorkingSetBytes)
 {
+    public long AllocatedBytes { get; init; }
+    public long GcCommittedBytes { get; init; }
+    public long GcHeapSizeBytes { get; init; }
+    public int Gen0Collections { get; init; }
+    public int Gen1Collections { get; init; }
+    public int Gen2Collections { get; init; }
+    public int Handles { get; init; }
+    public uint GdiObjects { get; init; }
+    public uint UserObjects { get; init; }
+
+    [DllImport("user32.dll")]
+    private static extern uint GetGuiResources(IntPtr process, uint flags);
+
     internal static MemorySnapshot Capture()
     {
         using var process = Process.GetCurrentProcess();
         process.Refresh();
-        return new(process.WorkingSet64, process.PrivateMemorySize64, GC.GetTotalMemory(forceFullCollection: false), process.PeakWorkingSet64);
+        var gc = GC.GetGCMemoryInfo(); // Last-GC heap/commit information, not a forced collection.
+        return new(process.WorkingSet64, process.PrivateMemorySize64, GC.GetTotalMemory(forceFullCollection: false), process.PeakWorkingSet64)
+        {
+            AllocatedBytes = GC.GetTotalAllocatedBytes(precise: false),
+            GcCommittedBytes = gc.TotalCommittedBytes, GcHeapSizeBytes = gc.HeapSizeBytes,
+            Gen0Collections = GC.CollectionCount(0), Gen1Collections = GC.CollectionCount(1), Gen2Collections = GC.CollectionCount(2),
+            Handles = process.HandleCount, GdiObjects = GetGuiResources(process.Handle, 0), UserObjects = GetGuiResources(process.Handle, 1)
+        };
     }
 }
 
@@ -50,13 +70,23 @@ internal static class DiagnosticRunner
         var idleCpuMs = (process.TotalProcessorTime - cpuStart).TotalMilliseconds;
         var idleWallMs = idleClock.Elapsed.TotalMilliseconds;
         var hidden = idleSamples[^1].Memory;
+        var checkpoints = new List<object>();
+        void Checkpoint(string phase, int cycle) => checkpoints.Add(new
+        {
+            Phase = phase, Cycle = cycle, ElapsedMilliseconds = idleClock.Elapsed.TotalMilliseconds,
+            Memory = MemorySnapshot.Capture(), Windows = System.Windows.Application.Current.Windows.Count,
+            OwnedWindows = window.OwnedWindows.Count
+        });
+        Checkpoint("before-popups", 0);
         int cycles = options.Extended ? 100 : 20;
         for (int i = 0; i < cycles; i++)
         {
             window.ShowPopup();
             await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ContextIdle);
             window.Hide();
+            if ((i + 1) % 10 == 0) Checkpoint("popup-hidden", i + 1);
         }
+        var afterPopupOnly = MemorySnapshot.Capture();
         int settingsCycles = options.Extended ? 10 : 0;
         for (int i = 0; i < settingsCycles; i++)
         {
@@ -68,7 +98,9 @@ internal static class DiagnosticRunner
                 await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ContextIdle);
             }
             finally { settings.Close(); }
+            Checkpoint("settings-closed", i + 1);
         }
+        var afterSettingsOnly = MemorySnapshot.Capture();
         await Task.Delay(2000);
         var afterCycles = MemorySnapshot.Capture();
         // Run codecs after idle sampling so native codec initialization is reported separately.
@@ -95,6 +127,9 @@ internal static class DiagnosticRunner
             PopupCycles = cycles,
             SettingsCycles = settingsCycles,
             Extended = options.Extended,
+            AfterPopupOnly = afterPopupOnly,
+            AfterSettingsOnly = afterSettingsOnly,
+            Checkpoints = checkpoints,
             AfterPopupCycles = afterCycles,
             AfterCodec = afterCodec,
             NativeApisAvailable = nativeApis,

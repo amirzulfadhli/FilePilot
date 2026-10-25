@@ -138,6 +138,19 @@ public sealed class DiagnosticTests : IDisposable
         finally { stop.Cancel(); await allocating; }
     }
     [Fact]
+    public void ResourceCountersAreSerializedWithExistingMemoryFields()
+    {
+        var snapshot = MemorySnapshot.Capture();
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(snapshot));
+        Assert.Equal(snapshot.PrivateBytes, json.RootElement.GetProperty("PrivateBytes").GetInt64());
+        Assert.True(snapshot.AllocatedBytes > 0);
+        Assert.True(snapshot.Handles > 0);
+        Assert.True(snapshot.GcCommittedBytes >= 0);
+        Assert.Equal(snapshot.Gen2Collections, json.RootElement.GetProperty("Gen2Collections").GetInt32());
+        Assert.Equal(snapshot.GdiObjects, json.RootElement.GetProperty("GdiObjects").GetUInt32());
+        Assert.Equal(snapshot.UserObjects, json.RootElement.GetProperty("UserObjects").GetUInt32());
+    }
+    [Fact]
     public void OneShotFallbackCannotKeepResidentMarkerAlive()
     {
         var name = @"Local\FilePilot.Tests." + Guid.NewGuid().ToString("N");
