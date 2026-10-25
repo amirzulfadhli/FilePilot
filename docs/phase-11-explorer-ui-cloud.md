@@ -1,0 +1,9 @@
+# Automated Explorer cloud acceptance
+
+This diagnostic-only branch adds an opt-in console probe under tools/FilePilot.HostedExplorerProbe. It has no extra NuGet dependencies, is not referenced by FilePilot, and is not included in the distribution. It refuses execution unless GITHUB_ACTIONS=true and RUNNER_ENVIRONMENT=github-hosted, and restricts its executable/report paths to the candidate checkout's artifacts directory.
+
+On a disposable hosted Windows 11 ARM VM, the native ARM64 test client drives the published x64 app under emulation. It opens a new, uniquely named Explorer folder containing a synthetic spaced/Unicode PNG; warms its classic menu before registration; registers the published executable; opens the actual classic menu again; invokes FilePilot; verifies the exact selected-file path; invokes Copy Path and compares only the expected test clipboard value. Original bytes must survive.
+
+The probe writes stage checkpoints before UI calls. It closes only its newly identified Explorer window and verified FilePilot process, unregisters its owned commands and checks the five keys are absent. It never restarts Explorer, changes defaults/security settings, or targets a pre-existing user window. No files are deleted through the UI. VM-local UI polling is confined to this explicit integration test; normal FilePilot remains event driven.
+
+This is automated interaction, not a manual test. An unavailable/noninteractive desktop or an unmet assertion makes the check fail, with ManualVerification=false and its last stage recorded. Such a result must be reported as unverified or failed, never silently skipped or promoted to a pass. The test does not certify native x64 hardware, Windows 10, physical DPI/monitor transitions or screen-reader speech. This branch is separate diagnostic evidence and must not be merged as a product fix without reviewing actual results.

@@ -77,7 +77,8 @@ jobs:
          github.ref == 'refs/heads/codex/phase-9-release-readiness' ||
          github.ref == 'refs/heads/codex/phase-10-beta-distribution' ||
          github.ref == 'refs/heads/codex/phase-11-beta-acceptance' ||
-         github.ref == 'refs/heads/codex/phase-11-windows11-cloud'))
+         github.ref == 'refs/heads/codex/phase-11-windows11-cloud' ||
+         github.ref == 'refs/heads/codex/phase-11-explorer-ui-cloud'))
     runs-on: windows-2025
     timeout-minutes: 25
     steps:
@@ -257,4 +258,40 @@ jobs:
             candidate/artifacts/shell-acceptance/**/*.json
             candidate/artifacts/performance/*/*.json
           if-no-files-found: error
+          retention-days: 7
+
+  explorer_ui_cloud:
+    name: Automated Windows 11 Explorer launch and Copy Path
+    needs: build
+    if: github.ref == 'refs/heads/codex/phase-11-explorer-ui-cloud'
+    runs-on: windows-11-vs2026-arm
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: candidate
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+          architecture: arm64
+      - name: Publish the unchanged x64 app for this cloud-only UI test
+        shell: pwsh
+        run: |
+          dotnet publish candidate/src/FilePilot.App -c Release -r win-x64 --self-contained true -p:DebugType=None -p:DebugSymbols=false -o 'candidate/artifacts/Explorer 文 x64'
+          if ($LASTEXITCODE -ne 0) { throw 'x64 publication failed.' }
+      - name: Warm the actual Explorer menu, register, launch and copy the exact path
+        shell: pwsh
+        run: |
+          $app = (Resolve-Path -LiteralPath 'candidate/artifacts/Explorer 文 x64/FilePilot.exe').Path
+          $output = Join-Path $env:GITHUB_WORKSPACE 'candidate/artifacts/explorer-ui'
+          dotnet run --project candidate/tools/FilePilot.HostedExplorerProbe -c Release -- $app $output
+          if ($LASTEXITCODE -ne 0) { throw 'Automated Explorer acceptance was not verified; inspect the stage/report.' }
+      - name: Retain automated interaction evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: FilePilot-explorer-ui-${{ github.sha }}
+          path: candidate/artifacts/explorer-ui/**/*.json
+          if-no-files-found: warn
           retention-days: 7
