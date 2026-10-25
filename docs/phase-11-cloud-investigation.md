@@ -12,6 +12,35 @@ A separate hosted-only script registers the actual published app under HKCU, the
 
 Native menu enumeration on hosted Windows Server is an automated integration check, not manual Windows 10/11 Explorer acceptance. Unicode/spaced executable and selected-file paths are included. A fresh-session Windows 11 classic-menu launch, Windows 10, physical monitors and assistive-technology testing remain unverified unless independently performed.
 
-## Status
+## Hosted evidence
 
-The initial change adds diagnosis and regression coverage, not a claimed root-cause fix. No limit is relaxed and neither blocker is declared resolved. Retained hosted logs and JSON must identify the failing phase before product changes are selected. Phase 11 must remain unmerged while either blocker is unresolved; Phase 12 and public release remain gated.
+[Run 40204028608](https://github.com/amirzulfadhli/FilePilot/actions/runs/40204028608), source 7fb76efeff522cfef45955b5e927bd00fdd45355, passed all five jobs on GitHub-hosted Windows Server 2025 (kernel build 26100). Release build had zero warnings/errors; the build report had 187 passes plus the three expected real-engine skips, and the real-engine report had all 190 tests passing without skips. Each full job passed 15 fresh-process desktop checks. Package/installer/lifecycle and independent PDF checks passed. No manual Windows test was performed in this follow-up.
+
+Both 30-second controls and both 1,800-second workloads passed the same limits, with 100 popup and ten Settings cycles per run:
+
+| Mode | Short control first frame / post-cycle growth | Long first frame / hidden private / post-cycle growth |
+| --- | --- | --- |
+| Popup | 3,645 ms / 25.80 MiB | 715 ms / 32.43 MiB / 27.62 MiB |
+| Resident widget | 3,863 ms / 26.03 MiB | 799 ms / 34.27 MiB / 28.29 MiB |
+
+Long-run checkpoints show one application window and zero owned windows after each closed Settings window. Resident GDI count stayed at 19 through popup cycles, rose to 23 at the first Settings window, then stayed at 23. USER count changed from 30 to 32 at the first popup and stayed at 32. Process handles were 502 through popup cycles, 503 for most Settings checkpoints, and 498 at the last Settings checkpoint. These samples do not establish an increasing window/GUI-handle leak on this runner.
+
+Private memory still grew during both phases: resident checkpoint values were 34.309 MiB before popups, 49.000 MiB after popup 100 and 66.289 MiB just after Settings 10. The unchanged final measurement two seconds later passed at 28.29 MiB growth. A natural generation-0 collection occurred at the last Settings checkpoint; the last-GC committed-heap counter then reported 20.371 MiB. No collection was requested by the test. Those observations do not identify the allocation owner or explain the earlier Windows 11 46.61-MiB failure.
+
+The native Shell probe found FilePilot for PNG/JPG/JPEG/WebP/DOCX, omitted it for TXT, and found the independent all-file control in all six single-file menus. This validates the existing per-user SystemFileAssociations method in that environment; no registration-location rewrite is justified by this result. It does not prove an actual Windows 11 Explorer click/launch or resolution of the earlier missing-menu case.
+
+[Original-source controls](https://github.com/amirzulfadhli/FilePilot/actions/runs/40205331820) are retained separately on codex/phase-11-cloud-baseline (0845705a41e80bb579a1e152bae423cc83c72a43). Their jobs explicitly check out and publish 842847154b0357e0e6abae5220f6bb593b09fe32 without changing that checkout, then measure its original binary using the compatible wrapper and unchanged limits. This distinguishes a cloud environment difference from an instrumentation effect; review those independent results alongside the instrumented runs.
+
+## Stronger menu regressions
+
+The follow-up probe warms association lookups before registration, then checks the same fixtures afterward. Its owned all-file control is created before the product registration so the product notification covers both changes. It also checks that the Single-selection commands are absent for a two-file selection. Finally it verifies all temporary keys are absent and neither command appears in a newly constructed menu after cleanup. The report stays Passed=false until both menu and cleanup assertions succeed. These remain automated native Shell checks on a disposable hosted VM, not manual Explorer acceptance.
+
+## Status and required remaining tests
+
+No verified product root-cause fix is claimed. Passing on Windows Server does not close an earlier failure on Windows 11 build 26200 at 125 percent scaling. The original failures remain recorded and Phase 11 remains unmerged. Required before closing them:
+
+- On an independently available Windows 11 test VM, reproduce the actual classic-menu installation and launch in both a fresh session and a session whose associations were already used. Check spaced/Unicode paths, single/multiple selection and unregistration, without changing defaults or restarting an existing user's Explorer automatically.
+- Reproduce the 1,800-second resident workload at 125-percent DPI in a Windows 11 desktop with an actual notification area. Capture the new phase counters; include rendering/heap profiling if the 32-MiB growth gate fails. Compare the original binary and instrumented binary under matching conditions, including relevant assistive-technology clients.
+- Run the same bounded checks after a justified product fix. A passing short control, fresh-server result or instrumentation change is not proof that the Windows 11 failure is fixed.
+
+Windows 10, physical monitor transitions, assistive-technology acceptance and broader real-document fidelity remain separate unavailable coverage. This follow-up has not accessed the laptop. Neither blocker is declared resolved; Phase 12, main integration and public release remain gated.

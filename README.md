@@ -6,7 +6,7 @@ The build version is **0.1.0-beta.1 candidate**, not an approved public release.
 
 For a maintainer-provided candidate, start with the [beta setup guide](docs/beta-quick-start.md): runtime and checksum checks, portable widget use, installation preview, activation, rollback and removal. No SDK is needed to run the packaged application.
 
-Phase 11 acceptance found two unresolved issues: the HKCU entry did not appear in the actual Windows 11 classic menu, and the requested hour-long diagnostic workload exceeded the existing resident post-cycle memory-growth budget (46.61 MiB versus 32 MiB). Right-click launch is not verified; the resident shortcut and Ctrl+O picker remain available. See [current acceptance results and merge blockers](docs/phase-11-acceptance-results.md). Phase 11 integration is held pending investigation. The [cloud-only follow-up](docs/phase-11-cloud-investigation.md) adds hosted diagnostics without accessing the laptop.
+Phase 11 acceptance found two unresolved issues: the HKCU entry did not appear in the actual Windows 11 classic menu, and the requested hour-long diagnostic workload exceeded the existing resident post-cycle memory-growth budget (46.61 MiB versus 32 MiB). Right-click launch is not verified; the resident shortcut and Ctrl+O picker remain available. See [current acceptance results and merge blockers](docs/phase-11-acceptance-results.md). Phase 11 integration is held pending investigation. The [cloud-only follow-up](docs/phase-11-cloud-investigation.md) records passing hosted diagnostics and native Shell checks; these do not close the earlier Windows 11 failures. No laptop access was used.
 
 ## Build and run
 

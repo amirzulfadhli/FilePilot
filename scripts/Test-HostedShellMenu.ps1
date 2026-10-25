@@ -53,27 +53,42 @@ public static class FilePilotCloudMenu
     [DllImport("ole32.dll")] static extern int OleInitialize(IntPtr reserved);
     [DllImport("ole32.dll")] static extern void OleUninitialize();
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)] static extern int SHParseDisplayName(string name, IntPtr context, out IntPtr id, uint flags, out uint attr);
+    [DllImport("shell32.dll")] static extern IntPtr ILFindLastID(IntPtr id);
     [DllImport("shell32.dll")] static extern int SHBindToParent(IntPtr id, ref Guid iid, out IShellFolder parent, out IntPtr child);
     [DllImport("user32.dll")] static extern IntPtr CreatePopupMenu();
     [DllImport("user32.dll")] static extern bool DestroyMenu(IntPtr menu);
     [DllImport("user32.dll")] static extern int GetMenuItemCount(IntPtr menu);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetMenuString(IntPtr menu, uint item, StringBuilder text, int maximum, uint flags);
 
-    public static string[] Read(string path)
+    public static string[] Read(string path) { return ReadSelection(new[] { path }); }
+
+    public static string[] ReadSelection(string[] paths)
     {
+        if (paths.Length == 0) throw new ArgumentException("Choose at least one fixture.");
+        foreach (var path in paths)
+            if (!String.Equals(System.IO.Path.GetDirectoryName(path), System.IO.Path.GetDirectoryName(paths[0]), StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("Selection fixtures must share one parent folder.");
         Marshal.ThrowExceptionForHR(OleInitialize(IntPtr.Zero));
-        IntPtr id = IntPtr.Zero, raw = IntPtr.Zero, menu = IntPtr.Zero;
+        var ids = new List<IntPtr>();
+        IntPtr raw = IntPtr.Zero, menu = IntPtr.Zero;
         IShellFolder parent = null;
         IContextMenu contextMenu = null;
         try
         {
-            uint attr;
-            Marshal.ThrowExceptionForHR(SHParseDisplayName(path, IntPtr.Zero, out id, 0, out attr));
+            foreach (var path in paths)
+            {
+                uint attr;
+                IntPtr id;
+                Marshal.ThrowExceptionForHR(SHParseDisplayName(path, IntPtr.Zero, out id, 0, out attr));
+                ids.Add(id);
+            }
             Guid folderId = typeof(IShellFolder).GUID;
             IntPtr child;
-            Marshal.ThrowExceptionForHR(SHBindToParent(id, ref folderId, out parent, out child));
+            Marshal.ThrowExceptionForHR(SHBindToParent(ids[0], ref folderId, out parent, out child));
+            var children = new IntPtr[ids.Count];
+            for (int i = 0; i < ids.Count; i++) children[i] = ILFindLastID(ids[i]);
             Guid menuId = typeof(IContextMenu).GUID;
-            Marshal.ThrowExceptionForHR(parent.GetUIObjectOf(IntPtr.Zero, 1, new[] { child }, ref menuId, IntPtr.Zero, out raw));
+            Marshal.ThrowExceptionForHR(parent.GetUIObjectOf(IntPtr.Zero, (uint)children.Length, children, ref menuId, IntPtr.Zero, out raw));
             contextMenu = (IContextMenu)Marshal.GetObjectForIUnknown(raw);
             menu = CreatePopupMenu();
             if (menu == IntPtr.Zero) throw new InvalidOperationException("CreatePopupMenu failed.");
@@ -95,7 +110,7 @@ public static class FilePilotCloudMenu
             if (contextMenu != null) Marshal.ReleaseComObject(contextMenu);
             if (raw != IntPtr.Zero) Marshal.Release(raw);
             if (parent != null) Marshal.ReleaseComObject(parent);
-            if (id != IntPtr.Zero) Marshal.FreeCoTaskMem(id);
+            foreach (var id in ids) Marshal.FreeCoTaskMem(id);
             OleUninitialize();
         }
     }
@@ -112,13 +127,19 @@ function Invoke-Registration([string]$Action) {
     }
     finally { $process.Dispose() }
 }
+$preRegistration = @()
+foreach ($extension in @($extensions) + @('.txt')) {
+    $fixture = Join-Path $output ('selected 文 with spaces' + $extension)
+    [IO.File]::WriteAllBytes($fixture, [Convert]::FromBase64String('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a/1cAAAAASUVORK5CYII='))
+    $labels = @([FilePilotCloudMenu]::Read($fixture))
+    if ($labels -contains 'FilePilot' -or $labels -contains $prototypeLabel) { throw 'Unexpected pre-registration menu entry; preserving the environment.' }
+    $preRegistration += [ordered]@{ Extension = $extension; Labels = $labels }
+}
 $registered = $false
 $prototypeCreated = $false
 $results = @()
 try {
-    # Preflight proved the product verb absent at every supported extension.
-    $registered = $true
-    Invoke-Registration '--register-context-menu'
+    # Preflight proved the product and control verbs absent.
     $prototype = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($prototypePath)
     try {
         $prototype.SetValue('', $prototypeLabel)
@@ -129,31 +150,51 @@ try {
         $prototypeCreated = $true
     }
     finally { $prototype.Dispose() }
+    # The product notification now covers both this owned control and the product verbs.
+    $registered = $true
+    Invoke-Registration '--register-context-menu'
     foreach ($extension in @($extensions) + @('.txt')) {
         $fixture = Join-Path $output ('selected 文 with spaces' + $extension)
-        # Only association enumeration is performed; no handler or conversion is invoked.
-        [IO.File]::WriteAllBytes($fixture, [Convert]::FromBase64String('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a/1cAAAAASUVORK5CYII='))
+        # The same fixture was queried before registration; exercise the warm cache too.
         $labels = @([FilePilotCloudMenu]::Read($fixture))
         $results += [ordered]@{ Extension = $extension; Labels = $labels; FilePilotVisible = ($labels -contains 'FilePilot'); ControlVisible = ($labels -contains $prototypeLabel) }
     }
+    $pair = @([FilePilotCloudMenu]::ReadSelection([string[]]@((Join-Path $output 'selected 文 with spaces.png'), (Join-Path $output 'selected 文 with spaces.jpg'))))
+    $multipleSelection = [ordered]@{ Labels = $pair; FilePilotVisible = ($pair -contains 'FilePilot'); ControlVisible = ($pair -contains $prototypeLabel) }
     $failed = @($results | Where-Object { $_.FilePilotVisible -ne ($_.Extension -in $extensions) -or -not $_.ControlVisible })
-    $report = [ordered]@{ SourceRevision = $env:GITHUB_SHA; OS = [Runtime.InteropServices.RuntimeInformation]::OSDescription; NativeShellEnumeration = $true; ManualExplorerVerification = $false; Results = $results; Passed = ($failed.Count -eq 0) }
+    $menuPassed = ($failed.Count -eq 0 -and -not $multipleSelection.FilePilotVisible -and -not $multipleSelection.ControlVisible)
+    $report = [ordered]@{ SourceRevision = $env:GITHUB_SHA; OS = [Runtime.InteropServices.RuntimeInformation]::OSDescription; NativeShellEnumeration = $true; ManualExplorerVerification = $false; WarmedBeforeRegistration = $true; BeforeRegistration = $preRegistration; Results = $results; MultipleSelection = $multipleSelection; MenuPassed = $menuPassed; CleanupVerified = $false; Passed = $false }
     [IO.File]::WriteAllText((Join-Path $output 'shell-menu.json'), ($report | ConvertTo-Json -Depth 6))
-    $report | ConvertTo-Json -Depth 6 | Write-Host
-    if ($failed.Count) { throw 'Native Shell menu acceptance failed; inspect the retained report. Registry presence is not visibility.' }
+    if (-not $menuPassed) { $report | ConvertTo-Json -Depth 6 | Write-Host; throw 'Native Shell menu acceptance failed; inspect the retained report. Registry presence is not visibility.' }
 }
 finally {
-    if ($prototypeCreated) {
-        $prototype = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($prototypePath)
-        try {
-            $command = $prototype.OpenSubKey('command')
+    try {
+        if ($prototypeCreated) {
+            $prototype = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($prototypePath)
             try {
-                if ($prototype.GetValue('FilePilotOwner') -cne $prototypeOwner -or $command.GetValue('') -cne $expectedCommand) { throw 'Cloud control changed; preserving it.' }
+                $command = $prototype.OpenSubKey('command')
+                try {
+                    if ($prototype.GetValue('FilePilotOwner') -cne $prototypeOwner -or $command.GetValue('') -cne $expectedCommand) { throw 'Cloud control changed; preserving it.' }
+                }
+                finally { $command.Dispose() }
             }
-            finally { $command.Dispose() }
+            finally { $prototype.Dispose() }
+            [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($prototypePath, $false)
         }
-        finally { $prototype.Dispose() }
-        [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($prototypePath, $false)
     }
-    if ($registered) { Invoke-Registration '--unregister-context-menu' }
+    finally { if ($registered) { Invoke-Registration '--unregister-context-menu' } }
 }
+
+# Verify cleanup independently of the registration command's exit status.
+foreach ($extension in $extensions) {
+    $key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey("Software\Classes\SystemFileAssociations\$extension\shell\FilePilot")
+    if ($key) { $key.Dispose(); throw 'Product registration remains after unregistration.' }
+}
+$key = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($prototypePath)
+if ($key) { $key.Dispose(); throw 'Cloud control remains after cleanup.' }
+$afterCleanup = @([FilePilotCloudMenu]::Read((Join-Path $output 'selected 文 with spaces.png')))
+if ($afterCleanup -contains 'FilePilot' -or $afterCleanup -contains $prototypeLabel) { throw 'A removed verb remains in a newly constructed Shell menu.' }
+$report.CleanupVerified = $true
+$report.Passed = $report.MenuPassed
+[IO.File]::WriteAllText((Join-Path $output 'shell-menu.json'), ($report | ConvertTo-Json -Depth 6))
+$report | ConvertTo-Json -Depth 6 | Write-Host
