@@ -9,3 +9,8 @@ The probe writes stage checkpoints before UI calls. It records window station, c
 This is automated interaction, not a manual test. An unavailable/noninteractive desktop or an unmet assertion makes the check fail, with ManualVerification=false and its last stage recorded. Such a result must be reported as unverified or failed, never silently skipped or promoted to a pass. The first probe opened/selected the fixture but timed out on the pre-registration menu, before any product registration. This prompted desktop/visibility diagnostics, not a FilePilot product change or increased deadline.
 
 The test does not certify native x64 hardware, Windows 10, physical DPI/monitor transitions or screen-reader speech. This branch is separate diagnostic evidence and must not be merged as a product fix without reviewing actual results. See the [cloud evidence record](phase-11-cloud-investigation.md), including the retained historical startup-budget failure.
+
+
+## Recorded outcome
+
+The final mouse-based [run 40211511699](https://github.com/amirzulfadhli/FilePilot/actions/runs/40211511699) failed waiting for the pre-registration menu. The interactive default desktop guard passed and cleanup/original-preservation assertions passed. Product registration, menu invocation and Copy Path were not reached. The build and complete real-engine test jobs passed; this UI acceptance is not passed. See the final findings in the [cloud evidence record](phase-11-cloud-investigation.md). No timeout or performance limit was increased, and no product registration rewrite was made based on an inconclusive pre-registration failure.
