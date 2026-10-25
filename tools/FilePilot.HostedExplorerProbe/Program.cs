@@ -52,28 +52,24 @@ internal static class Program
                 !w.Current.IsOffscreen && !previous.Contains(w.Current.NativeWindowHandle) && w.Current.Name.Contains(Path.GetFileName(folder), StringComparison.Ordinal)), "new Explorer folder");
             explorer = ownedExplorer;
             Stage("select fixture");
-            var item = WaitFor(() =>
-            {
-                var items = ownedExplorer.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem));
-                return items.Cast<AutomationElement>().SingleOrDefault(e =>
-                    e.Current.Name == Path.GetFileName(fixture) || e.Current.Name == Path.GetFileNameWithoutExtension(fixture));
-            }, "fixture list item");
+            var item = WaitFor(() => FindFixtureItem(ownedExplorer, fixture), "fixture list item");
             ((SelectionItemPattern)item.GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
             item.SetFocus();
             nint explorerHandle = ownedExplorer.Current.NativeWindowHandle;
             SetForegroundWindow(explorerHandle);
             WaitFor(() => GetForegroundWindow() == explorerHandle ? new object() : null, "owned Explorer foreground");
             Stage("warm classic menu before registration");
-            OpenClassicMenu();
+            OpenClassicMenu(WaitFor(() => FindFixtureItem(ownedExplorer, fixture), "fixture list item"));
             if (MenuItem("FilePilot") is not null) throw new InvalidOperationException("Unexpected FilePilot command before registration.");
             SendSingleKey(0x1B);
+            WaitFor(() => VisibleElement("Show more options") is null && MenuItem("Create shortcut") is null && MenuItem("Send to") is null ? new object() : null, "pre-registration menu dismissal");
             Stage("register into warmed Explorer session");
             registered = true;
             Registration(executable, "--register-context-menu");
             SetForegroundWindow(explorerHandle);
             WaitFor(() => GetForegroundWindow() == explorerHandle ? new object() : null, "owned Explorer foreground");
             Stage("open context menu after registration");
-            OpenClassicMenu();
+            OpenClassicMenu(WaitFor(() => FindFixtureItem(ownedExplorer, fixture), "fixture list item"));
             var menu = WaitFor(() => MenuItem("FilePilot"), "classic FilePilot menu item");
             menuSeen = true;
             var oldProcesses = Process.GetProcessesByName("FilePilot");
@@ -162,13 +158,31 @@ internal static class Program
         return report.Passed ? 0 : 1;
     }
     private static void Stage(string value) { stage = value; Console.WriteLine("checkpoint: " + value); }
-    private static void OpenClassicMenu()
+    private static AutomationElement? FindFixtureItem(AutomationElement explorer, string fixture) =>
+        explorer.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem))
+            .Cast<AutomationElement>().SingleOrDefault(e => !e.Current.IsOffscreen &&
+                (e.Current.Name == Path.GetFileName(fixture) || e.Current.Name == Path.GetFileNameWithoutExtension(fixture)));
+    private static AutomationElement? VisibleElement(string name) => AutomationElement.RootElement.FindFirst(TreeScope.Descendants,
+        new AndCondition(new PropertyCondition(AutomationElement.NameProperty, name),
+            new PropertyCondition(AutomationElement.IsOffscreenProperty, false)));
+    private static void OpenClassicMenu(AutomationElement item)
     {
         RequireInputDesktop(ReadDesktop());
-        SendKeys(0x10, 0x79);
-        var menu = WaitFor(() => MenuItem("Show more options") ?? ClassicMenu(), "context menu");
+        if (item.TryGetCurrentPattern(ScrollItemPattern.Pattern, out var scroll)) ((ScrollItemPattern)scroll).ScrollIntoView();
+        var bounds = item.Current.BoundingRectangle;
+        if (item.Current.IsOffscreen || bounds.IsEmpty || bounds.Width <= 0 || bounds.Height <= 0)
+            throw new InvalidOperationException("The owned fixture is not visibly clickable.");
+        int x = (int)Math.Round(bounds.Left + bounds.Width / 2), y = (int)Math.Round(bounds.Top + bounds.Height / 2);
+        if (!SetPhysicalCursorPos(x, y)) throw new InvalidOperationException("The hosted pointer could not reach the fixture.");
+        Console.WriteLine($"checkpoint: right-click owned fixture at {x},{y}");
+        Input[] clicks = [
+            new() { Type = 0, Data = new InputUnion { Mouse = new MouseInput { X = 0, Y = 0, Data = 0, Flags = 0x0008, Time = 0, Extra = 0 } } },
+            new() { Type = 0, Data = new InputUnion { Mouse = new MouseInput { X = 0, Y = 0, Data = 0, Flags = 0x0010, Time = 0, Extra = 0 } } }
+        ];
+        if (SendInput((uint)clicks.Length, clicks, Marshal.SizeOf<Input>()) != clicks.Length) throw new InvalidOperationException("Hosted right-click injection failed.");
+        var menu = WaitFor(() => VisibleElement("Show more options") ?? MenuItem("Create shortcut") ?? MenuItem("Send to"), "context menu");
         if (menu.Current.Name == "Show more options") Invoke(menu);
-        WaitFor(ClassicMenu, "classic menu window");
+        WaitFor(() => MenuItem("Create shortcut") ?? MenuItem("Send to"), "classic context menu");
     }
     private static AutomationElement? ClassicMenu() => AutomationElement.RootElement.FindFirst(TreeScope.Children,
         new AndCondition(new PropertyCondition(AutomationElement.ClassNameProperty, "#32768"),
@@ -252,14 +266,9 @@ internal static class Program
     [DllImport("user32.dll")] private static extern nint GetProcessWindowStation();
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern bool GetUserObjectInformation(nint handle, int index, System.Text.StringBuilder value, uint size, out uint needed);
     [StructLayout(LayoutKind.Sequential)] private struct Input { public uint Type; public InputUnion Data; }
-    [StructLayout(LayoutKind.Explicit, Size = 32)] private struct InputUnion { [FieldOffset(0)] public KeyboardInput Keyboard; }
+    [StructLayout(LayoutKind.Explicit, Size = 32)] private struct InputUnion { [FieldOffset(0)] public KeyboardInput Keyboard; [FieldOffset(0)] public MouseInput Mouse; }
+    [StructLayout(LayoutKind.Sequential)] private struct MouseInput { public int X; public int Y; public uint Data; public uint Flags; public uint Time; public nuint Extra; }
     [StructLayout(LayoutKind.Sequential)] private struct KeyboardInput { public ushort Key; public ushort Scan; public uint Flags; public uint Time; public nuint Extra; }
-    private static void SendKeys(ushort modifier, ushort key)
-    {
-        Input Key(ushort value, uint flags) => new() { Type = 1, Data = new InputUnion { Keyboard = new KeyboardInput { Key = value, Scan = 0, Flags = flags, Time = 0, Extra = 0 } } };
-        Input[] keys = [Key(modifier, 0), Key(key, 0), Key(key, 2), Key(modifier, 2)];
-        if (SendInput((uint)keys.Length, keys, Marshal.SizeOf<Input>()) != keys.Length) throw new InvalidOperationException("SendInput failed.");
-    }
     private static void SendSingleKey(ushort key)
     {
         Input[] keys = [
@@ -268,6 +277,7 @@ internal static class Program
         ];
         if (SendInput((uint)keys.Length, keys, Marshal.SizeOf<Input>()) != keys.Length) throw new InvalidOperationException("SendInput failed.");
     }
+    [DllImport("user32.dll", SetLastError = true)] private static extern bool SetPhysicalCursorPos(int x, int y);
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(nint window);
     [DllImport("user32.dll")] private static extern nint GetForegroundWindow();
     [DllImport("user32.dll", SetLastError = true)] private static extern uint SendInput(uint count, Input[] input, int size);
