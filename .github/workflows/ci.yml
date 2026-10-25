@@ -76,7 +76,8 @@ jobs:
          github.ref == 'refs/heads/codex/phase-8-stabilization' ||
          github.ref == 'refs/heads/codex/phase-9-release-readiness' ||
          github.ref == 'refs/heads/codex/phase-10-beta-distribution' ||
-         github.ref == 'refs/heads/codex/phase-11-beta-acceptance'))
+         github.ref == 'refs/heads/codex/phase-11-beta-acceptance' ||
+         github.ref == 'refs/heads/codex/phase-11-windows11-cloud'))
     runs-on: windows-2025
     timeout-minutes: 25
     steps:
@@ -196,4 +197,64 @@ jobs:
           name: FilePilot-cloud-shell-${{ github.sha }}
           path: artifacts/shell-acceptance/**/*.json
           if-no-files-found: warn
+          retention-days: 7
+
+  windows11_cloud:
+    name: Windows 11 x64 emulation (${{ matrix.case }})
+    needs: build
+    if: github.ref == 'refs/heads/codex/phase-11-windows11-cloud'
+    runs-on: windows-11-vs2026-arm
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        case: [shell, widget-current, widget-original]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          path: candidate
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: 842847154b0357e0e6abae5220f6bb593b09fe32
+          path: original
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+          architecture: arm64
+      - name: Publish the x64 executable for the declared application source
+        shell: pwsh
+        env:
+          FILEPILOT_CASE: ${{ matrix.case }}
+        run: |
+          $source = if ($env:FILEPILOT_CASE -eq 'widget-original') { 'original' } else { 'candidate' }
+          $actual = (git -C $source rev-parse HEAD).Trim()
+          $expected = if ($source -eq 'original') { '842847154b0357e0e6abae5220f6bb593b09fe32' } else { $env:GITHUB_SHA }
+          if ($actual -cne $expected -or @(git -C $source status --porcelain).Count) { throw 'Unexpected application source checkout.' }
+          dotnet publish "$source/src/FilePilot.App" -c Release -r win-x64 --self-contained true -p:DebugType=None -p:DebugSymbols=false -o 'candidate/artifacts/Windows 11 文 x64'
+          if ($LASTEXITCODE -ne 0) { throw 'x64 test publication failed.' }
+          $provenance = [ordered]@{ WorkflowSource = $env:GITHUB_SHA; ApplicationSource = $actual; HostArchitecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString(); Target = 'win-x64'; SelfContainedTestOnly = $true; ManualVerification = $false }
+          $provenance | ConvertTo-Json | Write-Host
+          [IO.File]::WriteAllText((Join-Path $PWD 'candidate/artifacts/windows11-provenance.json'), ($provenance | ConvertTo-Json))
+      - name: Warm-cache native Shell acceptance on Windows 11
+        if: matrix.case == 'shell'
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -STA -File candidate/scripts/Test-HostedShellMenu.ps1 -ExecutablePath 'candidate/artifacts/Windows 11 文 x64/FilePilot.exe'
+          if ($LASTEXITCODE -ne 0) { throw 'Windows 11 native Shell acceptance failed.' }
+      - name: Resident 30-minute workload with unchanged X64 assertion and limits
+        if: matrix.case != 'shell'
+        shell: pwsh
+        run: ./candidate/scripts/Measure-FilePilot.ps1 -ExecutablePath 'candidate/artifacts/Windows 11 文 x64/FilePilot.exe' -Runs 1 -Mode widget -Extended -IdleSeconds 1800
+      - name: Retain Windows 11 diagnostic evidence, never the test binaries
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: FilePilot-Windows11-${{ matrix.case }}-${{ github.sha }}
+          path: |
+            candidate/artifacts/windows11-provenance.json
+            candidate/artifacts/shell-acceptance/**/*.json
+            candidate/artifacts/performance/*/*.json
+          if-no-files-found: error
           retention-days: 7
