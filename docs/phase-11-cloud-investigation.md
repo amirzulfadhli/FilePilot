@@ -44,3 +44,13 @@ No verified product root-cause fix is claimed. Passing on Windows Server does no
 - Run the same bounded checks after a justified product fix. A passing short control, fresh-server result or instrumentation change is not proof that the Windows 11 failure is fixed.
 
 Windows 10, physical monitor transitions, assistive-technology acceptance and broader real-document fidelity remain separate unavailable coverage. This follow-up has not accessed the laptop. Neither blocker is declared resolved; Phase 12, main integration and public release remain gated.
+
+## Independent controls and remaining failures
+
+The original-source [control run 40205331820](https://github.com/amirzulfadhli/FilePilot/actions/runs/40205331820) completed both 1,800-second workloads. Post-cycle private growth passed at 28.59 MiB for popup and 27.80 MiB for resident mode. The overall control run nevertheless **failed**: the original popup's first frame was 5,409.22 ms, above the unchanged 5,000-ms startup limit. Its resident first frame was 4,166.91 ms. The failure is retained, not rerun or relabeled as passed. Its cause has not been established. The original source passing the memory limits on this server also prevents attributing the hosted passes to a product fix or the new counters.
+
+The Phase 11 [repeat run 40207043728](https://github.com/amirzulfadhli/FilePilot/actions/runs/40207043728), source f4e75c7a6138bceef8f5dd5171baffdaecbdfe14, passed all five jobs, including the warmed/single-selection/cleanup native menu checks and both long workloads.
+
+A separate [automated Explorer probe run 40209337576](https://github.com/amirzulfadhli/FilePilot/actions/runs/40209337576) opened and selected its fixture but **failed before product registration**, while opening the pre-registration classic menu. It timed out waiting for a context menu and verified cleanup. This is an unverified interaction check, not evidence that FilePilot's registered entry failed or that Explorer launch passed. Follow-up probe diagnostics record the input desktop/window station and bounded owned-window UI observations; no unlock, security-setting change or substitution of native menu enumeration for the actual Explorer test is allowed.
+
+Additional Windows 11 ARM-host/x64-emulation controls are retained on [codex/phase-11-windows11-cloud](https://github.com/amirzulfadhli/FilePilot/tree/codex/phase-11-windows11-cloud). Their actual outcomes and limitations must be reviewed separately. Native x64 Windows 11 at 125-percent DPI, Windows 10 and the original client-specific failure conditions remain unverified. Main integration and Phase 12 remain blocked.

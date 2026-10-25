@@ -36,14 +36,20 @@ internal static class Program
         AutomationElement? explorer = null;
         Process? application = null;
         bool registered = false, passed = false, menuSeen = false, pathMatched = false, clipboardMatched = false, cleanup = false;
+        DesktopObservation? desktop = null;
+        object? uiObservation = null;
         string? error = null;
         try
         {
+            Stage("verify hosted input desktop");
+            desktop = ReadDesktop();
+            Console.WriteLine(JsonSerializer.Serialize(desktop));
+            RequireInputDesktop(desktop);
             var previous = ExplorerWindows().Select(w => w.Current.NativeWindowHandle).ToHashSet();
             Stage("open owned Explorer folder");
             using (var launched = Process.Start(new ProcessStartInfo("explorer.exe", "/n,/select,\"" + fixture + "\"") { UseShellExecute = true })) { }
             var ownedExplorer = WaitFor(() => ExplorerWindows().SingleOrDefault(w =>
-                !previous.Contains(w.Current.NativeWindowHandle) && w.Current.Name.Contains(Path.GetFileName(folder), StringComparison.Ordinal)), "new Explorer folder");
+                !w.Current.IsOffscreen && !previous.Contains(w.Current.NativeWindowHandle) && w.Current.Name.Contains(Path.GetFileName(folder), StringComparison.Ordinal)), "new Explorer folder");
             explorer = ownedExplorer;
             Stage("select fixture");
             var item = WaitFor(() =>
@@ -106,7 +112,15 @@ internal static class Program
             if (!File.ReadAllBytes(fixture).SequenceEqual(original)) throw new InvalidOperationException("The fixture changed.");
             passed = true;
         }
-        catch (Exception ex) { error = ex.GetType().Name + ": " + ex.Message; }
+        catch (Exception ex)
+        {
+            error = ex.GetType().Name + ": " + ex.Message;
+            if (explorer is not null)
+            {
+                try { uiObservation = ObserveUI(explorer); }
+                catch (Exception observationError) { uiObservation = new { Error = observationError.GetType().Name }; }
+            }
+        }
         finally
         {
             try
@@ -137,6 +151,7 @@ internal static class Program
             SourceRevision = Environment.GetEnvironmentVariable("GITHUB_SHA"),
             OS = RuntimeInformation.OSDescription, HostArchitecture = RuntimeInformation.OSArchitecture.ToString(),
             AutomatedExplorerInteraction = true, ManualVerification = false, Stage = stage,
+            Desktop = desktop, UIObservation = uiObservation, VisibleMenuItemsRequired = true,
             MenuSeen = menuSeen, SelectedPathMatched = pathMatched, ClipboardMatched = clipboardMatched,
             OriginalPreserved = File.Exists(fixture) && File.ReadAllBytes(fixture).SequenceEqual(original), CleanupVerified = cleanup,
             Passed = passed && cleanup, Error = error
@@ -149,13 +164,15 @@ internal static class Program
     private static void Stage(string value) { stage = value; Console.WriteLine("checkpoint: " + value); }
     private static void OpenClassicMenu()
     {
+        RequireInputDesktop(ReadDesktop());
         SendKeys(0x10, 0x79);
         var menu = WaitFor(() => MenuItem("Show more options") ?? ClassicMenu(), "context menu");
         if (menu.Current.Name == "Show more options") Invoke(menu);
         WaitFor(ClassicMenu, "classic menu window");
     }
     private static AutomationElement? ClassicMenu() => AutomationElement.RootElement.FindFirst(TreeScope.Children,
-        new PropertyCondition(AutomationElement.ClassNameProperty, "#32768"));
+        new AndCondition(new PropertyCondition(AutomationElement.ClassNameProperty, "#32768"),
+            new PropertyCondition(AutomationElement.IsOffscreenProperty, false)));
     private static string VerbPath(string extension) => $@"Software\Classes\SystemFileAssociations\{extension}\shell\FilePilot";
     private static void Registration(string executable, string action)
     {
@@ -171,7 +188,8 @@ internal static class Program
     private static AutomationElement? MenuItem(string name) =>
         AutomationElement.RootElement.FindFirst(TreeScope.Descendants, new AndCondition(
             new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.MenuItem),
-            new PropertyCondition(AutomationElement.NameProperty, name)));
+            new PropertyCondition(AutomationElement.NameProperty, name),
+            new PropertyCondition(AutomationElement.IsOffscreenProperty, false)));
     private static void Invoke(AutomationElement element) =>
         ((InvokePattern)element.GetCurrentPattern(InvokePattern.Pattern)).Invoke();
     private static T WaitFor<T>(Func<T?> read, string label) where T : class
@@ -186,6 +204,53 @@ internal static class Program
         }
         throw new TimeoutException("Timed out waiting for " + label);
     }
+    private sealed record DesktopObservation(string WindowStation, string ThreadDesktop, string InputDesktop, int InputError, bool UserInteractive, int SessionId, int InputStructureSize);
+    private static DesktopObservation ReadDesktop()
+    {
+        nint input = OpenInputDesktop(0, false, 1);
+        int error = input == 0 ? Marshal.GetLastWin32Error() : 0;
+        try
+        {
+            using var process = Process.GetCurrentProcess();
+            return new(ReadObjectName(GetProcessWindowStation()), ReadObjectName(GetThreadDesktop(GetCurrentThreadId())),
+                input == 0 ? "unavailable" : ReadObjectName(input), error, Environment.UserInteractive, process.SessionId, Marshal.SizeOf<Input>());
+        }
+        finally { if (input != 0) CloseDesktop(input); }
+    }
+    private static string ReadObjectName(nint handle)
+    {
+        var value = new System.Text.StringBuilder(256);
+        return GetUserObjectInformation(handle, 2, value, (uint)(value.Capacity * 2), out _) ? value.ToString() : "unavailable";
+    }
+    private static void RequireInputDesktop(DesktopObservation value)
+    {
+        if (!value.UserInteractive || !value.WindowStation.Equals("WinSta0", StringComparison.OrdinalIgnoreCase) || !value.InputDesktop.Equals("Default", StringComparison.OrdinalIgnoreCase) || !value.InputDesktop.Equals(value.ThreadDesktop, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Hosted input desktop is unavailable; real Explorer interaction is unverified. No unlock or security change will be attempted.");
+    }
+    private static object ObserveUI(AutomationElement explorer)
+    {
+        var windows = new List<object>();
+        foreach (AutomationElement window in AutomationElement.RootElement.FindAll(TreeScope.Children, Condition.TrueCondition))
+        {
+            var info = window.Current;
+            if (info.ProcessId != explorer.Current.ProcessId && info.ClassName != "#32768" &&
+                !info.ClassName.Contains("Popup", StringComparison.OrdinalIgnoreCase)) continue;
+            windows.Add(new { info.Name, info.ClassName, Type = info.ControlType.ProgrammaticName, info.IsOffscreen,
+                Items = window.FindAll(TreeScope.Descendants, new OrCondition(
+                    new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Menu),
+                    new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.MenuItem),
+                    new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button)))
+                    .Cast<AutomationElement>().Take(100).Select(e => new { e.Current.Name, e.Current.ClassName, Type = e.Current.ControlType.ProgrammaticName, e.Current.IsOffscreen }).ToArray() });
+            if (windows.Count == 20) break;
+        }
+        return new { Windows = windows, Foreground = GetForegroundWindow().ToInt64() };
+    }
+    [DllImport("user32.dll", SetLastError = true)] private static extern nint OpenInputDesktop(uint flags, bool inherit, uint access);
+    [DllImport("user32.dll")] private static extern bool CloseDesktop(nint desktop);
+    [DllImport("user32.dll")] private static extern nint GetThreadDesktop(uint thread);
+    [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] private static extern nint GetProcessWindowStation();
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern bool GetUserObjectInformation(nint handle, int index, System.Text.StringBuilder value, uint size, out uint needed);
     [StructLayout(LayoutKind.Sequential)] private struct Input { public uint Type; public InputUnion Data; }
     [StructLayout(LayoutKind.Explicit, Size = 32)] private struct InputUnion { [FieldOffset(0)] public KeyboardInput Keyboard; }
     [StructLayout(LayoutKind.Sequential)] private struct KeyboardInput { public ushort Key; public ushort Scan; public uint Flags; public uint Time; public nuint Extra; }
