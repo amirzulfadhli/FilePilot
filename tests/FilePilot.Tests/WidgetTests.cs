@@ -85,6 +85,33 @@ public sealed class WidgetTests : IDisposable
         Assert.StartsWith("Success", model.Status);
     }
     [Fact]
+    public async Task RenameCollisionPreservesSelectionAndAllowsChoosingAnotherName()
+    {
+        var source = FileAt("source.txt");
+        var occupied = Path.Combine(root, "occupied.txt");
+        File.WriteAllText(occupied, "collision sentinel");
+        string? copied = null;
+        var model = new MainViewModel(path => copied = path);
+        model.LoadFile(source);
+        model.RenameText = "occupied";
+        await model.RenameAsync();
+        Assert.Contains("Choose another name", model.Status);
+        Assert.DoesNotContain("Choose another folder", model.Status);
+        Assert.False(model.IsBusy);
+        Assert.True(model.CanMove);
+        Assert.Equal("original data", File.ReadAllText(source));
+        Assert.Equal("collision sentinel", File.ReadAllText(occupied));
+        model.CopyPathCommand.Execute(null);
+        Assert.Equal(source, copied);
+        model.RenameText = "recovered 文";
+        await model.RenameAsync();
+        model.CopyPathCommand.Execute(null);
+        Assert.Equal(Path.Combine(root, "recovered 文.txt"), copied);
+        Assert.Equal("original data", File.ReadAllText(copied!));
+        Assert.False(File.Exists(source));
+        Assert.Equal("collision sentinel", File.ReadAllText(occupied));
+    }
+    [Fact]
     public void MixedInvalidSelectionClearsOldSelectionAndNeverActsOnSubset()
     {
         var model = new MainViewModel(_ => throw new InvalidOperationException());

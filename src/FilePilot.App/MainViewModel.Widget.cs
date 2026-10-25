@@ -64,6 +64,8 @@ public sealed partial class MainViewModel
             ResetConversion();
             Status = "Success: file renamed. Copy Path now uses the new name.";
         }
+        catch (FileCollisionException)
+        { Status = "A file or folder with that name already exists. Nothing was renamed or overwritten. Choose another name."; }
         catch (Exception ex) when (IsExpected(ex)) { Status = FriendlyError(ex); }
         finally { IsBusy = false; ResetRename(); }
     }
